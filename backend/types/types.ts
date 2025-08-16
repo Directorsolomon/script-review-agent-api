@@ -47,7 +47,7 @@ export interface AgentReview {
     summary: string;
     evidence: Array<{
       scene_index?: number;
-      page_range?: [number, number];
+      page_range?: number[];
       text_excerpt?: string;
     }>;
     severity: 'info' | 'minor' | 'major' | 'critical';
@@ -57,7 +57,7 @@ export interface AgentReview {
     source_id: string;
     version: string;
     section?: string;
-    line_range?: [number, number];
+    line_range?: number[];
   }>;
   confidence: number;
 }
@@ -77,7 +77,7 @@ export interface FinalReport {
     source_id: string;
     version: string;
     section?: string;
-    line_range?: [number, number];
+    line_range?: number[];
   }>;
   delivery?: {
     pdf_uri?: string | null;
