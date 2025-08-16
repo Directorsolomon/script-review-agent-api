@@ -35,7 +35,7 @@ export const purgeOldData = api<PurgeOldDataRequest, PurgeOldDataResponse>(
 
     if (dryRun) {
       // Count what would be deleted
-      const scriptChunks = await db.queryAll`
+      const scriptChunksCount = await db.queryRow`
         SELECT COUNT(*) as count FROM script_chunks 
         WHERE submission_id = ANY(${oldSubmissions.map(s => s.id)})
       `;
@@ -43,7 +43,7 @@ export const purgeOldData = api<PurgeOldDataRequest, PurgeOldDataResponse>(
       return {
         deletedSubmissions: oldSubmissions.length,
         deletedDocChunks: inactiveDocChunks.length,
-        deletedScriptChunks: scriptChunks[0]?.count || 0,
+        deletedScriptChunks: scriptChunksCount?.count || 0,
       };
     }
 

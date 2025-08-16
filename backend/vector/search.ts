@@ -37,11 +37,29 @@ export interface SearchScriptResponse {
   results: SearchResult[];
 }
 
+// Check if vector type is available
+async function isVectorAvailable(): Promise<boolean> {
+  try {
+    const result = await db.queryRow`
+      SELECT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'vector') as available
+    `;
+    return result?.available || false;
+  } catch {
+    return false;
+  }
+}
+
 // Performs vector search on document chunks
 export const searchDocs = api<SearchDocsRequest, SearchDocsResponse>(
   { expose: false, method: "POST", path: "/vector/search/docs" },
   async (req) => {
     const k = req.k || 12;
+    const vectorAvailable = await isVectorAvailable();
+    
+    if (!vectorAvailable) {
+      // Fallback to text-based search when vector is not available
+      return { results: [] };
+    }
     
     // Generate embedding for query
     const { embeddings: queryEmbeddings } = await embeddings.generateEmbeddings({
@@ -75,15 +93,19 @@ export const searchDocs = api<SearchDocsRequest, SearchDocsResponse>(
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    const results = await db.queryAll`
+    // Use raw SQL for complex vector operations
+    const query = `
       SELECT c.id, c.doc_id, c.section, c.line_start, c.line_end, c.text,
-             1 - (c.embedding::vector <=> $1::vector) AS score
+             1 - (c.embedding <=> $1::vector) AS score
       FROM admin_doc_chunks c
       JOIN docs d ON d.id = c.doc_id
       ${whereClause}
-      ORDER BY c.embedding::vector <=> $1::vector
-      LIMIT ${k}
+      ORDER BY c.embedding <=> $1::vector
+      LIMIT $${params.length + 1}
     `;
+    
+    params.push(k);
+    const results = await db.rawQueryAll(query, params);
 
     return {
       results: results.map(r => ({
@@ -106,6 +128,12 @@ export const searchScript = api<SearchScriptRequest, SearchScriptResponse>(
   { expose: false, method: "POST", path: "/vector/search/script" },
   async (req) => {
     const k = req.k || 8;
+    const vectorAvailable = await isVectorAvailable();
+    
+    if (!vectorAvailable) {
+      // Fallback to text-based search when vector is not available
+      return { results: [] };
+    }
     
     // Generate embedding for query
     const { embeddings: queryEmbeddings } = await embeddings.generateEmbeddings({
@@ -113,14 +141,14 @@ export const searchScript = api<SearchScriptRequest, SearchScriptResponse>(
     });
     const queryEmbedding = queryEmbeddings[0];
 
-    const results = await db.queryAll`
+    const results = await db.rawQueryAll(`
       SELECT id, submission_id, scene_index, page_start, page_end, text,
-             1 - (embedding::vector <=> $1::vector) AS score
+             1 - (embedding <=> $1::vector) AS score
       FROM script_chunks 
       WHERE submission_id = $2
-      ORDER BY embedding::vector <=> $1::vector
-      LIMIT ${k}
-    `;
+      ORDER BY embedding <=> $1::vector
+      LIMIT $3
+    `, [JSON.stringify(queryEmbedding), req.submissionId, k]);
 
     return {
       results: results.map(r => ({

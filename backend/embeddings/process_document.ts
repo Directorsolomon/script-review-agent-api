@@ -10,6 +10,18 @@ export interface ProcessDocumentResponse {
   ok: boolean;
 }
 
+// Check if vector type is available
+async function isVectorAvailable(): Promise<boolean> {
+  try {
+    const result = await db.queryRow`
+      SELECT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'vector') as available
+    `;
+    return result?.available || false;
+  } catch {
+    return false;
+  }
+}
+
 // Processes a document for embeddings and stores chunks
 export const processDocument = api<ProcessDocumentRequest, ProcessDocumentResponse>(
   { expose: false, method: "POST", path: "/embeddings/process" },
@@ -21,6 +33,8 @@ export const processDocument = api<ProcessDocumentRequest, ProcessDocumentRespon
     if (!doc) {
       throw new Error("Document not found");
     }
+
+    const vectorAvailable = await isVectorAvailable();
 
     try {
       // Extract text from document
@@ -50,10 +64,18 @@ export const processDocument = api<ProcessDocumentRequest, ProcessDocumentRespon
         const chunk = chunks[i];
         const embedding = chunkEmbeddings[i];
         
-        await db.exec`
-          INSERT INTO admin_doc_chunks (doc_id, section, line_start, line_end, text, priority_weight, embedding)
-          VALUES (${req.docId}, ${chunk.section || null}, ${chunk.lineStart || null}, ${chunk.lineEnd || null}, ${chunk.text}, ${1.0}, ${JSON.stringify(embedding)})
-        `;
+        if (vectorAvailable) {
+          await db.exec`
+            INSERT INTO admin_doc_chunks (doc_id, section, line_start, line_end, text, priority_weight, embedding)
+            VALUES (${req.docId}, ${chunk.section || null}, ${chunk.lineStart || null}, ${chunk.lineEnd || null}, ${chunk.text}, ${1.0}, ${JSON.stringify(embedding)})
+          `;
+        } else {
+          // Store embedding as JSON string when vector type is not available
+          await db.exec`
+            INSERT INTO admin_doc_chunks (doc_id, section, line_start, line_end, text, priority_weight, embedding)
+            VALUES (${req.docId}, ${chunk.section || null}, ${chunk.lineStart || null}, ${chunk.lineEnd || null}, ${chunk.text}, ${1.0}, ${JSON.stringify(embedding)})
+          `;
+        }
       }
 
       // Mark document as active

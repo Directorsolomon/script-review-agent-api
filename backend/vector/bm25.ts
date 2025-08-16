@@ -59,15 +59,18 @@ export const searchDocsBM25 = api<BM25SearchDocsRequest, BM25SearchDocsResponse>
 
     const whereClause = conditions.length > 0 ? `AND ${conditions.join(' AND ')}` : '';
 
-    const results = await db.queryAll`
+    const query = `
       SELECT c.id, c.doc_id, c.section, c.line_start, c.line_end, c.text,
              ts_rank_cd(c.tsv, plainto_tsquery($1)) AS rank
       FROM admin_doc_chunks c 
       JOIN docs d ON d.id = c.doc_id
       WHERE c.tsv @@ plainto_tsquery($1) ${whereClause}
       ORDER BY rank DESC
-      LIMIT ${k}
+      LIMIT $${params.length + 1}
     `;
+    
+    params.push(k);
+    const results = await db.rawQueryAll(query, params);
 
     return {
       results: results.map(r => ({
@@ -91,14 +94,14 @@ export const searchScriptBM25 = api<BM25SearchScriptRequest, BM25SearchScriptRes
   async (req) => {
     const k = req.k || 8;
 
-    const results = await db.queryAll`
+    const results = await db.rawQueryAll(`
       SELECT id, submission_id, scene_index, page_start, page_end, text,
              ts_rank_cd(tsv, plainto_tsquery($1)) AS rank
       FROM script_chunks 
       WHERE submission_id = $2 AND tsv @@ plainto_tsquery($1)
       ORDER BY rank DESC
-      LIMIT ${k}
-    `;
+      LIMIT $3
+    `, [req.keyword, req.submissionId, k]);
 
     return {
       results: results.map(r => ({

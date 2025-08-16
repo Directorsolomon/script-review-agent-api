@@ -11,10 +11,24 @@ export interface ProcessScriptResponse {
   ok: boolean;
 }
 
+// Check if vector type is available
+async function isVectorAvailable(): Promise<boolean> {
+  try {
+    const result = await db.queryRow`
+      SELECT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'vector') as available
+    `;
+    return result?.available || false;
+  } catch {
+    return false;
+  }
+}
+
 // Processes a script for embeddings and stores chunks
 export const processScript = api<ProcessScriptRequest, ProcessScriptResponse>(
   { expose: false, method: "POST", path: "/embeddings/script" },
   async (req) => {
+    const vectorAvailable = await isVectorAvailable();
+
     try {
       // Extract text from script
       const { text: extractedText } = await text.extractText({
@@ -43,10 +57,18 @@ export const processScript = api<ProcessScriptRequest, ProcessScriptResponse>(
         const chunk = chunks[i];
         const embedding = chunkEmbeddings[i];
         
-        await db.exec`
-          INSERT INTO script_chunks (submission_id, scene_index, page_start, page_end, text, embedding)
-          VALUES (${req.submissionId}, ${null}, ${null}, ${null}, ${chunk.text}, ${JSON.stringify(embedding)})
-        `;
+        if (vectorAvailable) {
+          await db.exec`
+            INSERT INTO script_chunks (submission_id, scene_index, page_start, page_end, text, embedding)
+            VALUES (${req.submissionId}, ${null}, ${null}, ${null}, ${chunk.text}, ${JSON.stringify(embedding)})
+          `;
+        } else {
+          // Store embedding as JSON string when vector type is not available
+          await db.exec`
+            INSERT INTO script_chunks (submission_id, scene_index, page_start, page_end, text, embedding)
+            VALUES (${req.submissionId}, ${null}, ${null}, ${null}, ${chunk.text}, ${JSON.stringify(embedding)})
+          `;
+        }
       }
 
     } catch (error) {

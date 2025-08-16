@@ -2,6 +2,7 @@ import { api } from "encore.dev/api";
 import { Bucket } from "encore.dev/storage/objects";
 
 const docsBucket = new Bucket("docs");
+const scriptsBucket = new Bucket("scripts");
 
 export interface ExtractTextRequest {
   s3Key: string;
@@ -16,7 +17,13 @@ export interface ExtractTextResponse {
 export const extractText = api<ExtractTextRequest, ExtractTextResponse>(
   { expose: false, method: "POST", path: "/text/extract" },
   async (req) => {
-    const buffer = await docsBucket.download(req.s3Key);
+    // Try docs bucket first, then scripts bucket
+    let buffer: Buffer;
+    try {
+      buffer = await docsBucket.download(req.s3Key);
+    } catch {
+      buffer = await scriptsBucket.download(req.s3Key);
+    }
     
     if (isPDF(buffer, req.contentType)) {
       return { text: await extractPDF(buffer) };
