@@ -1,0 +1,98 @@
+import { api } from "encore.dev/api";
+
+export interface ChunkTextRequest {
+  text: string;
+  maxTokens?: number;
+  overlap?: number;
+}
+
+export interface TextChunk {
+  text: string;
+  section?: string;
+  lineStart?: number;
+  lineEnd?: number;
+}
+
+export interface ChunkTextResponse {
+  chunks: TextChunk[];
+}
+
+const DEFAULT_MAX_TOKENS = 800;
+const DEFAULT_OVERLAP = 120;
+
+// Chunks text into smaller segments for embedding
+export const chunkText = api<ChunkTextRequest, ChunkTextResponse>(
+  { expose: false, method: "POST", path: "/text/chunk" },
+  async (req) => {
+    const maxTokens = req.maxTokens || DEFAULT_MAX_TOKENS;
+    const overlap = req.overlap || DEFAULT_OVERLAP;
+    
+    const chunks = chunkByHeadingsAndWindow(req.text, maxTokens, overlap);
+    return { chunks };
+  }
+);
+
+function roughTokenCount(text: string): number {
+  return Math.ceil(text.length / 4); // Rough heuristic: 4 chars per token
+}
+
+function chunkByHeadingsAndWindow(text: string, maxTokens: number, overlap: number): TextChunk[] {
+  const lines = text.split(/\r?\n/);
+  const chunks: TextChunk[] = [];
+  let currentSection = '';
+  let buffer: string[] = [];
+  let lineStart = 1;
+
+  // Regex to detect headings (markdown, screenplay format, etc.)
+  const headingRegex = /^(#|\w+\.|[A-Z][A-Z\s]{4,}|INT\.|EXT\.)/;
+
+  function flushBuffer(lineEnd: number) {
+    if (buffer.length === 0) return;
+    
+    const text = buffer.join('\n').trim();
+    if (!text) return;
+
+    // Split into sliding windows if text is too long
+    const words = text.split(/\s+/);
+    let start = 0;
+
+    while (start < words.length) {
+      let end = start;
+      let tokenCount = 0;
+
+      // Add words until we hit the token limit
+      while (end < words.length && tokenCount + roughTokenCount(words[end] + ' ') <= maxTokens) {
+        tokenCount += roughTokenCount(words[end] + ' ');
+        end++;
+      }
+
+      const chunkText = words.slice(start, end).join(' ');
+      chunks.push({
+        text: chunkText,
+        section: currentSection,
+        lineStart,
+        lineEnd,
+      });
+
+      if (end >= words.length) break;
+
+      // Move start position with overlap
+      const overlapWords = Math.floor(overlap / (roughTokenCount('avgword') || 1));
+      start = Math.max(start + 1, end - overlapWords);
+    }
+
+    buffer = [];
+  }
+
+  lines.forEach((line, index) => {
+    if (headingRegex.test(line.trim())) {
+      flushBuffer(index);
+      currentSection = line.trim();
+      lineStart = index + 1;
+    }
+    buffer.push(line);
+  });
+
+  flushBuffer(lines.length);
+  return chunks;
+}

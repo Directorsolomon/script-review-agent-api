@@ -26,8 +26,8 @@ export const create = api<CreateSubmissionRequest, CreateSubmissionResponse>(
     const now = new Date().toISOString();
 
     await db.exec`
-      INSERT INTO submissions (id, writer_name, writer_email, script_title, format, draft_version, genre, region, platform, file_s3_key, created_at)
-      VALUES (${id}, ${req.writer_name}, ${req.writer_email}, ${req.script_title}, ${req.format}, ${req.draft_version}, ${req.genre || null}, ${req.region || null}, ${req.platform || 'YouTube'}, ${req.file_s3_key || null}, ${now})
+      INSERT INTO submissions (id, writer_name, writer_email, script_title, format, draft_version, genre, region, platform, file_s3_key, status, created_at)
+      VALUES (${id}, ${req.writer_name}, ${req.writer_email}, ${req.script_title}, ${req.format}, ${req.draft_version}, ${req.genre || null}, ${req.region || null}, ${req.platform || 'YouTube'}, ${req.file_s3_key || null}, ${'queued'}, ${now})
     `;
 
     return { submissionId: id };
