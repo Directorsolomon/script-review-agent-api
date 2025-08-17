@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import { useBackend } from "./AuthProvider";
 import ValidationMessage from "./ValidationMessage";
+import Button from "./Button";
+import LoadingSpinner from "./LoadingSpinner";
 
 interface Submission {
   id: string;
@@ -15,35 +17,6 @@ interface Submission {
   status: "queued" | "processing" | "completed" | "failed";
   file_s3Key?: string;
   created_at: string;
-}
-
-function Button({ children, className, variant = "primary", size = "md", ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { 
-  variant?: "primary" | "secondary" | "outline" | "ghost"; 
-  size?: "sm" | "md" | "lg";
-}) {
-  const baseClasses = "inline-flex items-center justify-center font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none";
-  
-  const sizeClasses = {
-    sm: "px-3 py-1.5 text-sm",
-    md: "px-4 py-2 text-sm",
-    lg: "px-6 py-3 text-base",
-  };
-  
-  const variantClasses = {
-    primary: "bg-gray-900 text-white hover:bg-gray-800",
-    secondary: "bg-white text-gray-900 hover:bg-gray-50 border border-gray-200",
-    outline: "bg-transparent text-gray-900 hover:bg-gray-50 border border-gray-200",
-    ghost: "bg-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50",
-  };
-
-  return (
-    <button
-      className={`${baseClasses} ${sizeClasses[size]} ${variantClasses[variant]} ${className || ""}`}
-      {...props}
-    >
-      {children}
-    </button>
-  );
 }
 
 function Card({ title, description, children, actions }: { 
@@ -63,18 +36,6 @@ function Card({ title, description, children, actions }: {
       </div>
       <div className="p-8">{children}</div>
     </div>
-  );
-}
-
-function LoadingSpinner({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
-  const sizeClasses = {
-    sm: "w-4 h-4",
-    md: "w-6 h-6",
-    lg: "w-8 h-8",
-  };
-
-  return (
-    <div className={`animate-spin rounded-full border-2 border-gray-200 border-t-gray-900 ${sizeClasses[size]}`} />
   );
 }
 

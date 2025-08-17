@@ -1,8 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useAuth, useBackend } from "./components/AuthProvider";
-import LoginForm from "./components/LoginForm";
+import RouteGuard from "./components/RouteGuard";
+import Navigation from "./components/Navigation";
+import { useRouter } from "./components/Router";
 import ConfirmDialog from "./components/ConfirmDialog";
 import ValidationMessage from "./components/ValidationMessage";
+import Button from "./components/Button";
+import LoadingSpinner from "./components/LoadingSpinner";
 
 // ----------------------------- Utilities -----------------------------
 async function uploadToPresignedURL(url: string, file: File) {
@@ -15,36 +19,6 @@ function cx(...classes: (string | false | undefined | null)[]) {
 }
 
 // ----------------------------- UI Primitives -----------------------------
-function Button({ children, className, variant = "primary", size = "md", ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { 
-  variant?: "primary" | "secondary" | "danger" | "outline" | "ghost"; 
-  size?: "sm" | "md" | "lg";
-}) {
-  const baseClasses = "inline-flex items-center justify-center font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none";
-  
-  const sizeClasses = {
-    sm: "px-3 py-1.5 text-sm",
-    md: "px-4 py-2 text-sm",
-    lg: "px-6 py-3 text-base",
-  };
-  
-  const variantClasses = {
-    primary: "bg-gray-900 text-white hover:bg-gray-800",
-    secondary: "bg-white text-gray-900 hover:bg-gray-50 border border-gray-200",
-    danger: "bg-red-600 text-white hover:bg-red-700",
-    outline: "bg-transparent text-gray-900 hover:bg-gray-50 border border-gray-200",
-    ghost: "bg-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50",
-  };
-
-  return (
-    <button
-      className={cx(baseClasses, sizeClasses[size], variantClasses[variant], className)}
-      {...props}
-    >
-      {children}
-    </button>
-  );
-}
-
 function Input({ error, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { error?: boolean }) {
   return (
     <input
@@ -112,18 +86,6 @@ function FormField({ label, error, required, children }: {
   );
 }
 
-function LoadingSpinner({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
-  const sizeClasses = {
-    sm: "w-4 h-4",
-    md: "w-6 h-6",
-    lg: "w-8 h-8",
-  };
-
-  return (
-    <div className={cx("animate-spin rounded-full border-2 border-gray-200 border-t-gray-900", sizeClasses[size])} />
-  );
-}
-
 function Modal({ isOpen, onClose, title, children }: { isOpen: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
   if (!isOpen) return null;
 
@@ -162,28 +124,19 @@ interface AdminDoc {
   updated_at: string;
 }
 
-// ----------------------------- Navigation -----------------------------
-function AdminNavigation() {
-  const { user, logout } = useAuth();
-
-  return (
-    <header className="border-b border-gray-100">
-      <div className="max-w-7xl mx-auto px-6">
-        <div className="flex items-center justify-between h-16">
-          <h1 className="text-lg font-semibold text-gray-900">Admin Panel</h1>
-
-          <div className="flex items-center space-x-4">
-            <span className="text-sm text-gray-600">
-              {user?.name} ({user?.role})
-            </span>
-            <Button variant="outline" size="sm" onClick={logout}>
-              Sign Out
-            </Button>
-          </div>
-        </div>
-      </div>
-    </header>
-  );
+interface Submission {
+  id: string;
+  writer_name: string;
+  writer_email: string;
+  script_title: string;
+  format: "feature" | "series" | "youtube_movie";
+  draft_version: "1st" | "2nd" | "3rd";
+  genre?: string;
+  region?: string;
+  platform?: string;
+  status: "queued" | "processing" | "completed" | "failed";
+  file_s3Key?: string;
+  created_at: string;
 }
 
 // ----------------------------- Edit Doc Modal -----------------------------
@@ -453,7 +406,7 @@ function DocsTab() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-6 py-12 space-y-12">
+    <div className="space-y-12">
       <Card 
         title="Upload Documentation" 
         description="Upload guidelines, rubrics, and platform notes"
@@ -646,28 +599,260 @@ function DocsTab() {
   );
 }
 
-// ----------------------------- Admin App Shell -----------------------------
-export default function AdminApp() {
-  const { user } = useAuth();
+// ----------------------------- Submissions Tab -----------------------------
+function SubmissionsTab() {
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [filters, setFilters] = useState({
+    status: "",
+    writer_email: "",
+    region: "",
+    platform: "",
+  });
+  const backend = useBackend();
 
-  if (!user || !['admin', 'editor', 'viewer'].includes(user.role)) {
+  async function loadSubmissions() {
+    try {
+      setError(null);
+      const response = await backend.admin.listAdminSubmissions({
+        status: filters.status || undefined,
+        writer_email: filters.writer_email || undefined,
+        region: filters.region || undefined,
+        platform: filters.platform || undefined,
+        limit: 100,
+      });
+      setSubmissions(response.items);
+    } catch (e: any) {
+      console.error("Failed to load submissions:", e);
+      setError(e.message || "Failed to load submissions");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    loadSubmissions();
+  }, [filters]);
+
+  function updateFilter(field: string, value: string) {
+    setFilters(prev => ({ ...prev, [field]: value }));
+  }
+
+  function getStatusText(status: string): string {
+    switch (status) {
+      case "queued": return "Pending";
+      case "processing": return "In Review";
+      case "completed": return "Complete";
+      case "failed": return "Failed";
+      default: return status;
+    }
+  }
+
+  function formatDate(dateString: string): string {
+    return new Date(dateString).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  }
+
+  if (loading) {
     return (
-      <div className="min-h-screen bg-white flex items-center justify-center p-6">
-        <div className="max-w-md w-full text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-6">Admin Access Required</h1>
-          <p className="text-gray-600 mb-8">Please sign in with an admin account to access this panel</p>
-          <LoginForm showRegister={false} />
-        </div>
+      <div className="flex items-center justify-center py-12">
+        <LoadingSpinner size="lg" />
+        <span className="ml-3 text-gray-600">Loading submissions...</span>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-white">
-      <AdminNavigation />
-      <main>
-        <DocsTab />
-      </main>
+    <Card 
+      title="All Submissions" 
+      description={`${submissions.length} total submissions`}
+    >
+      {error && (
+        <ValidationMessage type="error" message={error} className="mb-6" />
+      )}
+
+      {/* Filters */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+          <Select
+            value={filters.status}
+            onChange={(e) => updateFilter('status', e.target.value)}
+          >
+            <option value="">All Statuses</option>
+            <option value="queued">Pending</option>
+            <option value="processing">In Review</option>
+            <option value="completed">Complete</option>
+            <option value="failed">Failed</option>
+          </Select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Writer Email</label>
+          <Input
+            value={filters.writer_email}
+            onChange={(e) => updateFilter('writer_email', e.target.value)}
+            placeholder="Search by email..."
+          />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Region</label>
+          <Select
+            value={filters.region}
+            onChange={(e) => updateFilter('region', e.target.value)}
+          >
+            <option value="">All Regions</option>
+            <option value="NG">Nigeria</option>
+            <option value="KE">Kenya</option>
+            <option value="GH">Ghana</option>
+            <option value="ZA">South Africa</option>
+            <option value="GLOBAL">Global</option>
+          </Select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Platform</label>
+          <Select
+            value={filters.platform}
+            onChange={(e) => updateFilter('platform', e.target.value)}
+          >
+            <option value="">All Platforms</option>
+            <option value="YouTube">YouTube</option>
+            <option value="Cinema">Cinema</option>
+            <option value="VOD">VOD</option>
+            <option value="TV">TV</option>
+          </Select>
+        </div>
+      </div>
+      
+      <div className="overflow-x-auto">
+        <table className="min-w-full text-sm">
+          <thead>
+            <tr className="text-left text-gray-600 border-b border-gray-200">
+              <th className="py-3 font-medium">Script</th>
+              <th className="py-3 font-medium">Writer</th>
+              <th className="py-3 font-medium">Status</th>
+              <th className="py-3 font-medium">Format</th>
+              <th className="py-3 font-medium">Region</th>
+              <th className="py-3 font-medium">Submitted</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {submissions.map((submission) => (
+              <tr key={submission.id} className="hover:bg-gray-50">
+                <td className="py-3">
+                  <div>
+                    <p className="font-medium text-gray-900">{submission.script_title}</p>
+                    <p className="text-xs text-gray-500">{submission.genre || 'No genre'}</p>
+                  </div>
+                </td>
+                <td className="py-3">
+                  <div>
+                    <p className="text-gray-900">{submission.writer_name}</p>
+                    <p className="text-xs text-gray-500">{submission.writer_email}</p>
+                  </div>
+                </td>
+                <td className="py-3">
+                  <span className="text-gray-600">
+                    {getStatusText(submission.status)}
+                  </span>
+                </td>
+                <td className="py-3">
+                  <span className="text-gray-600">
+                    {submission.format} • {submission.draft_version}
+                  </span>
+                </td>
+                <td className="py-3">{submission.region || "—"}</td>
+                <td className="py-3 text-gray-600">
+                  {formatDate(submission.created_at)}
+                </td>
+              </tr>
+            ))}
+            {submissions.length === 0 && (
+              <tr>
+                <td colSpan={6} className="py-12 text-center text-gray-500">
+                  No submissions found matching the current filters.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+// ----------------------------- Admin Tabs -----------------------------
+function AdminTabs() {
+  const [activeTab, setActiveTab] = useState('docs');
+  const { user } = useAuth();
+
+  const tabs = [
+    { id: 'docs', label: 'Documentation', component: DocsTab },
+    { id: 'submissions', label: 'Submissions', component: SubmissionsTab },
+  ];
+
+  const canEdit = user && ['admin', 'editor'].includes(user.role);
+
+  return (
+    <div className="space-y-8">
+      {/* Tab Navigation */}
+      <div className="border-b border-gray-200">
+        <nav className="-mb-px flex space-x-8">
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={cx(
+                "py-2 px-1 border-b-2 font-medium text-sm transition-colors",
+                activeTab === tab.id
+                  ? "border-gray-900 text-gray-900"
+                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+              )}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      {/* Tab Content */}
+      <div>
+        {tabs.map((tab) => {
+          if (tab.id === activeTab) {
+            const Component = tab.component;
+            return <Component key={tab.id} />;
+          }
+          return null;
+        })}
+      </div>
     </div>
+  );
+}
+
+// ----------------------------- Admin App Shell -----------------------------
+export default function AdminApp() {
+  const { currentPath, navigate } = useRouter();
+
+  return (
+    <RouteGuard requiredRoles={['admin', 'editor', 'viewer']}>
+      <div className="min-h-screen bg-gray-50">
+        <Navigation currentPath={currentPath} navigate={navigate} />
+        <main className="max-w-7xl mx-auto px-6 py-12">
+          <div className="mb-12">
+            <h1 className="text-2xl font-bold text-gray-900 mb-2">Admin Panel</h1>
+            <p className="text-gray-600">Manage documentation and review submissions</p>
+          </div>
+          <AdminTabs />
+        </main>
+      </div>
+    </RouteGuard>
   );
 }
