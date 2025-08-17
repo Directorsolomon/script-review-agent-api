@@ -10,7 +10,7 @@ function Button({ children, className, variant = "primary", size = "md", ...prop
   variant?: "primary" | "secondary" | "outline" | "ghost"; 
   size?: "sm" | "md" | "lg";
 }) {
-  const baseClasses = "inline-flex items-center justify-center font-medium rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none";
+  const baseClasses = "inline-flex items-center justify-center font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none";
   
   const sizeClasses = {
     sm: "px-3 py-1.5 text-sm",
@@ -19,10 +19,10 @@ function Button({ children, className, variant = "primary", size = "md", ...prop
   };
   
   const variantClasses = {
-    primary: "bg-zinc-900 text-white hover:bg-zinc-800 border border-zinc-900",
-    secondary: "bg-white text-zinc-900 hover:bg-zinc-50 border border-zinc-300",
-    outline: "bg-transparent text-zinc-900 hover:bg-zinc-50 border border-zinc-300",
-    ghost: "bg-transparent text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 border border-transparent",
+    primary: "bg-gray-900 text-white hover:bg-gray-800",
+    secondary: "bg-white text-gray-900 hover:bg-gray-50 border border-gray-200",
+    outline: "bg-transparent text-gray-900 hover:bg-gray-50 border border-gray-200",
+    ghost: "bg-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50",
   };
 
   return (
@@ -39,8 +39,8 @@ function Input({ error, ...props }: React.InputHTMLAttributes<HTMLInputElement> 
   return (
     <input
       {...props}
-      className={`w-full rounded-xl border px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-1 placeholder:text-zinc-400 ${
-        error ? "border-red-300 focus:ring-red-500" : "border-zinc-300"
+      className={`w-full rounded-lg border px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-1 placeholder:text-gray-400 ${
+        error ? "border-red-300 focus:ring-red-500" : "border-gray-200"
       } ${props.className || ""}`}
     />
   );
@@ -54,7 +54,7 @@ function LoadingSpinner({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
   };
 
   return (
-    <div className={`animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-900 ${sizeClasses[size]}`} />
+    <div className={`animate-spin rounded-full border-2 border-gray-200 border-t-gray-900 ${sizeClasses[size]}`} />
   );
 }
 
@@ -116,29 +116,25 @@ export default function LoginForm({ onSuccess, showRegister = true }: LoginFormP
 
   function updateFormData(field: string, value: string) {
     setFormData(prev => ({ ...prev, [field]: value }));
-    // Clear error when user starts typing
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: "" }));
     }
   }
 
   return (
-    <div className="w-full max-w-md">
-      <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-        <div className="text-center mb-6">
-          <h2 className="text-xl font-semibold text-zinc-900">
-            {isLogin ? "Welcome back" : "Create your account"}
+    <div className="w-full max-w-sm mx-auto">
+      <div className="bg-white rounded-lg border border-gray-200 p-8">
+        <div className="text-center mb-8">
+          <h2 className="text-xl font-semibold text-gray-900">
+            {isLogin ? "Sign in" : "Create account"}
           </h2>
-          <p className="text-sm text-zinc-600 mt-1">
-            {isLogin ? "Sign in to access your dashboard" : "Join to start getting script feedback"}
-          </p>
         </div>
         
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-6">
           {!isLogin && (
             <div>
-              <label htmlFor="name" className="block text-sm font-medium text-zinc-700 mb-1">
-                Full Name <span className="text-red-500">*</span>
+              <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-2">
+                Full Name
               </label>
               <Input
                 id="name"
@@ -154,8 +150,8 @@ export default function LoginForm({ onSuccess, showRegister = true }: LoginFormP
           )}
           
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-zinc-700 mb-1">
-              Email Address <span className="text-red-500">*</span>
+            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-2">
+              Email
             </label>
             <Input
               id="email"
@@ -170,8 +166,8 @@ export default function LoginForm({ onSuccess, showRegister = true }: LoginFormP
           </div>
           
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-zinc-700 mb-1">
-              Password <span className="text-red-500">*</span>
+            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-2">
+              Password
             </label>
             <Input
               id="password"
@@ -183,15 +179,10 @@ export default function LoginForm({ onSuccess, showRegister = true }: LoginFormP
               autoComplete={isLogin ? "current-password" : "new-password"}
             />
             {errors.password && <p className="text-sm text-red-600 mt-1">{errors.password}</p>}
-            {!isLogin && (
-              <p className="text-xs text-zinc-500 mt-1">
-                Must be at least 8 characters long
-              </p>
-            )}
           </div>
           
           {errors.submit && (
-            <div className="bg-red-50 border border-red-200 rounded-xl p-3">
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3">
               <p className="text-sm text-red-700">{errors.submit}</p>
             </div>
           )}
@@ -217,7 +208,7 @@ export default function LoginForm({ onSuccess, showRegister = true }: LoginFormP
                 setErrors({});
                 setFormData({ email: "", password: "", name: "" });
               }}
-              className="text-sm text-zinc-600 hover:text-zinc-900 transition-colors"
+              className="text-sm text-gray-600 hover:text-gray-900 transition-colors"
             >
               {isLogin ? "Don't have an account? Sign up" : "Already have an account? Sign in"}
             </button>

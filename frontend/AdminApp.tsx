@@ -14,34 +14,12 @@ function cx(...classes: (string | false | undefined | null)[]) {
   return classes.filter(Boolean).join(" ");
 }
 
-async function safeCopyToClipboard(text: string) {
-  try {
-    if (navigator.clipboard && window.isSecureContext) {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-  } catch {}
-  try {
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.position = 'fixed';
-    ta.style.left = '-9999px';
-    document.body.appendChild(ta);
-    ta.select();
-    const ok = document.execCommand('copy');
-    document.body.removeChild(ta);
-    return ok;
-  } catch {
-    return false;
-  }
-}
-
 // ----------------------------- UI Primitives -----------------------------
 function Button({ children, className, variant = "primary", size = "md", ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { 
   variant?: "primary" | "secondary" | "danger" | "outline" | "ghost"; 
   size?: "sm" | "md" | "lg";
 }) {
-  const baseClasses = "inline-flex items-center justify-center font-medium rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none";
+  const baseClasses = "inline-flex items-center justify-center font-medium rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none";
   
   const sizeClasses = {
     sm: "px-3 py-1.5 text-sm",
@@ -50,11 +28,11 @@ function Button({ children, className, variant = "primary", size = "md", ...prop
   };
   
   const variantClasses = {
-    primary: "bg-zinc-900 text-white hover:bg-zinc-800 border border-zinc-900",
-    secondary: "bg-white text-zinc-900 hover:bg-zinc-50 border border-zinc-300",
-    danger: "bg-red-600 text-white hover:bg-red-700 border border-red-600",
-    outline: "bg-transparent text-zinc-900 hover:bg-zinc-50 border border-zinc-300",
-    ghost: "bg-transparent text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 border border-transparent",
+    primary: "bg-gray-900 text-white hover:bg-gray-800",
+    secondary: "bg-white text-gray-900 hover:bg-gray-50 border border-gray-200",
+    danger: "bg-red-600 text-white hover:bg-red-700",
+    outline: "bg-transparent text-gray-900 hover:bg-gray-50 border border-gray-200",
+    ghost: "bg-transparent text-gray-600 hover:text-gray-900 hover:bg-gray-50",
   };
 
   return (
@@ -72,10 +50,10 @@ function Input({ error, ...props }: React.InputHTMLAttributes<HTMLInputElement> 
     <input
       {...props}
       className={cx(
-        "w-full rounded-xl border px-3 py-2 text-sm transition-colors",
-        "focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-1",
-        "placeholder:text-zinc-400",
-        error ? "border-red-300 focus:ring-red-500" : "border-zinc-300",
+        "w-full rounded-lg border px-3 py-2 text-sm transition-colors",
+        "focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-1",
+        "placeholder:text-gray-400",
+        error ? "border-red-300 focus:ring-red-500" : "border-gray-200",
         props.className
       )}
     />
@@ -87,25 +65,10 @@ function Select({ error, className, ...props }: React.SelectHTMLAttributes<HTMLS
     <select
       {...props}
       className={cx(
-        "w-full rounded-xl border px-3 py-2 text-sm bg-white transition-colors",
-        "focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-1",
-        error ? "border-red-300 focus:ring-red-500" : "border-zinc-300",
+        "w-full rounded-lg border px-3 py-2 text-sm bg-white transition-colors",
+        "focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-1",
+        error ? "border-red-300 focus:ring-red-500" : "border-gray-200",
         className
-      )}
-    />
-  );
-}
-
-function Textarea({ error, ...props }: React.TextareaHTMLAttributes<HTMLTextAreaElement> & { error?: boolean }) {
-  return (
-    <textarea
-      {...props}
-      className={cx(
-        "w-full rounded-xl border px-3 py-2 text-sm transition-colors resize-vertical",
-        "focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-1",
-        "placeholder:text-zinc-400",
-        error ? "border-red-300 focus:ring-red-500" : "border-zinc-300",
-        props.className
       )}
     />
   );
@@ -118,32 +81,16 @@ function Card({ title, description, children, actions }: {
   actions?: React.ReactNode;
 }) {
   return (
-    <div className="rounded-2xl border border-zinc-200 bg-white shadow-sm">
-      <div className="flex items-start justify-between p-6 border-b border-zinc-100">
+    <div className="rounded-lg border border-gray-200 bg-white">
+      <div className="flex items-start justify-between p-8 border-b border-gray-100">
         <div className="flex-1">
-          <h3 className="text-lg font-semibold text-zinc-900">{title}</h3>
-          {description && <p className="text-sm text-zinc-600 mt-1">{description}</p>}
+          <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
+          {description && <p className="text-sm text-gray-600 mt-2">{description}</p>}
         </div>
-        {actions && <div className="ml-4 flex-shrink-0">{actions}</div>}
+        {actions && <div className="ml-6 flex-shrink-0">{actions}</div>}
       </div>
-      <div className="p-6">{children}</div>
+      <div className="p-8">{children}</div>
     </div>
-  );
-}
-
-function Tag({ children, variant = "default" }: { children: React.ReactNode; variant?: "default" | "success" | "warning" | "error" | "info" }) {
-  const variantClasses = {
-    default: "bg-zinc-100 text-zinc-700",
-    success: "bg-green-100 text-green-700",
-    warning: "bg-yellow-100 text-yellow-700",
-    error: "bg-red-100 text-red-700",
-    info: "bg-blue-100 text-blue-700",
-  };
-
-  return (
-    <span className={cx("px-2 py-0.5 rounded-full text-xs font-medium", variantClasses[variant])}>
-      {children}
-    </span>
   );
 }
 
@@ -154,8 +101,8 @@ function FormField({ label, error, required, children }: {
   children: React.ReactNode;
 }) {
   return (
-    <div className="space-y-1">
-      <label className="block text-sm font-medium text-zinc-700">
+    <div className="space-y-2">
+      <label className="block text-sm font-medium text-gray-700">
         {label}
         {required && <span className="text-red-500 ml-1">*</span>}
       </label>
@@ -173,7 +120,7 @@ function LoadingSpinner({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
   };
 
   return (
-    <div className={cx("animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-900", sizeClasses[size])} />
+    <div className={cx("animate-spin rounded-full border-2 border-gray-200 border-t-gray-900", sizeClasses[size])} />
   );
 }
 
@@ -183,12 +130,12 @@ function Modal({ isOpen, onClose, title, children }: { isOpen: boolean; onClose:
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="fixed inset-0 bg-black bg-opacity-50" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-        <div className="flex items-center justify-between p-6 border-b border-zinc-100">
-          <h3 className="text-lg font-semibold text-zinc-900">{title}</h3>
+      <div className="relative bg-white rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-6 border-b border-gray-100">
+          <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
           <button
             onClick={onClose}
-            className="text-zinc-400 hover:text-zinc-600 text-xl leading-none p-1"
+            className="text-gray-400 hover:text-gray-600 text-xl leading-none p-1"
             aria-label="Close modal"
           >
             ×
@@ -215,71 +162,18 @@ interface AdminDoc {
   updated_at: string;
 }
 
-interface Submission {
-  id: string;
-  writer_name: string;
-  writer_email: string;
-  script_title: string;
-  format: "feature" | "series" | "youtube_movie";
-  draft_version: "1st" | "2nd" | "3rd";
-  genre?: string;
-  region?: string;
-  platform?: string;
-  status: "queued" | "processing" | "completed" | "failed";
-  file_s3Key?: string;
-  created_at: string;
-}
-
-interface ReportRecord {
-  submission_id: string;
-  overall_score?: number;
-  report_json?: any;
-  created_at: string;
-  updated_at: string;
-}
-
 // ----------------------------- Navigation -----------------------------
 function AdminNavigation() {
   const { user, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState("docs");
-
-  const tabs = [
-    { id: "docs", label: "Documentation", icon: "📚" },
-    { id: "submissions", label: "Submissions", icon: "📝" },
-    { id: "reports", label: "Reports", icon: "📊" },
-  ];
 
   return (
-    <header className="sticky top-0 z-50 bg-white/80 backdrop-blur-md border-b border-zinc-200">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+    <header className="border-b border-gray-100">
+      <div className="max-w-7xl mx-auto px-6">
         <div className="flex items-center justify-between h-16">
-          <div className="flex items-center">
-            <h1 className="text-xl font-bold text-zinc-900">Script Review Admin</h1>
-            <div className="hidden sm:block ml-3">
-              <Tag variant="warning">Admin Panel</Tag>
-            </div>
-          </div>
+          <h1 className="text-lg font-semibold text-gray-900">Admin Panel</h1>
 
-          <nav className="hidden md:flex items-center space-x-1">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={cx(
-                  "px-4 py-2 rounded-xl text-sm font-medium transition-colors",
-                  activeTab === tab.id
-                    ? "bg-zinc-900 text-white"
-                    : "text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100"
-                )}
-              >
-                <span className="mr-2">{tab.icon}</span>
-                {tab.label}
-              </button>
-            ))}
-          </nav>
-
-          <div className="flex items-center space-x-3">
-            <span className="text-sm text-zinc-600">
+          <div className="flex items-center space-x-4">
+            <span className="text-sm text-gray-600">
               {user?.name} ({user?.role})
             </span>
             <Button variant="outline" size="sm" onClick={logout}>
@@ -523,7 +417,6 @@ function DocsTab() {
       await backend.admin.completeDoc({ docId: presign.docId });
       await loadDocs();
       
-      // Reset form
       setFormData({
         file: null,
         title: "",
@@ -560,10 +453,10 @@ function DocsTab() {
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="max-w-7xl mx-auto px-6 py-12 space-y-12">
       <Card 
         title="Upload Documentation" 
-        description="Upload guidelines, rubrics, and platform notes. Files are automatically processed and vectorized."
+        description="Upload guidelines, rubrics, and platform notes"
       >
         <form onSubmit={handleUpload} className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -642,7 +535,7 @@ function DocsTab() {
               onChange={(e) => updateFormData('file', e.target.files?.[0] || null)}
               error={!!errors.file}
             />
-            <p className="text-sm text-zinc-500 mt-1">
+            <p className="text-sm text-gray-500 mt-1">
               Supported formats: PDF, DOCX, Markdown, TXT • Maximum size: 20 MB
             </p>
           </FormField>
@@ -665,7 +558,7 @@ function DocsTab() {
         <div className="overflow-x-auto">
           <table className="min-w-full text-sm">
             <thead>
-              <tr className="text-left text-zinc-600 border-b border-zinc-200">
+              <tr className="text-left text-gray-600 border-b border-gray-200">
                 <th className="py-3 font-medium">Document</th>
                 <th className="py-3 font-medium">Type</th>
                 <th className="py-3 font-medium">Region</th>
@@ -675,31 +568,24 @@ function DocsTab() {
                 <th className="py-3 font-medium">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-zinc-100">
+            <tbody className="divide-y divide-gray-100">
               {docs.map((doc) => (
-                <tr key={doc.id} className="hover:bg-zinc-50">
+                <tr key={doc.id} className="hover:bg-gray-50">
                   <td className="py-3">
                     <div>
-                      <p className="font-medium text-zinc-900">{doc.title}</p>
-                      <p className="text-xs text-zinc-500">v{doc.version}</p>
-                      <div className="flex flex-wrap gap-1 mt-1">
-                        {(doc.tags || []).map((tag) => (
-                          <Tag key={tag} variant="default">{tag}</Tag>
-                        ))}
-                      </div>
+                      <p className="font-medium text-gray-900">{doc.title}</p>
+                      <p className="text-xs text-gray-500">v{doc.version}</p>
                     </div>
                   </td>
                   <td className="py-3">
-                    <Tag variant="info">{doc.doc_type}</Tag>
+                    <span className="text-gray-600">{doc.doc_type}</span>
                   </td>
                   <td className="py-3">{doc.region || "—"}</td>
                   <td className="py-3">{doc.platform || "—"}</td>
                   <td className="py-3">
-                    <Tag variant={doc.status === 'active' ? 'success' : doc.status === 'inactive' ? 'error' : 'warning'}>
-                      {doc.status}
-                    </Tag>
+                    <span className="text-gray-600">{doc.status}</span>
                   </td>
-                  <td className="py-3 text-zinc-600">
+                  <td className="py-3 text-gray-600">
                     {new Date(doc.updated_at).toLocaleDateString()}
                   </td>
                   <td className="py-3">
@@ -727,7 +613,7 @@ function DocsTab() {
               ))}
               {docs.length === 0 && (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-zinc-500">
+                  <td colSpan={7} className="py-12 text-center text-gray-500">
                     No documents uploaded yet. Upload your first document above.
                   </td>
                 </tr>
@@ -764,16 +650,12 @@ function DocsTab() {
 export default function AdminApp() {
   const { user } = useAuth();
 
-  // Check if user has admin access
   if (!user || !['admin', 'editor', 'viewer'].includes(user.role)) {
     return (
-      <div className="min-h-screen bg-zinc-50 flex items-center justify-center p-4">
-        <div className="max-w-md w-full">
-          <div className="text-center mb-8">
-            <div className="text-4xl mb-4">🔒</div>
-            <h1 className="text-2xl font-bold text-zinc-900 mb-2">Admin Access Required</h1>
-            <p className="text-zinc-600">Please sign in with an admin account to access this panel</p>
-          </div>
+      <div className="min-h-screen bg-white flex items-center justify-center p-6">
+        <div className="max-w-md w-full text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-6">Admin Access Required</h1>
+          <p className="text-gray-600 mb-8">Please sign in with an admin account to access this panel</p>
           <LoginForm showRegister={false} />
         </div>
       </div>
@@ -781,7 +663,7 @@ export default function AdminApp() {
   }
 
   return (
-    <div className="min-h-screen bg-zinc-50">
+    <div className="min-h-screen bg-white">
       <AdminNavigation />
       <main>
         <DocsTab />
