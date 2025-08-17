@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
-import backend from "~backend/client";
+import { useAuth, useBackend } from "./components/AuthProvider";
+import LoginForm from "./components/LoginForm";
+import ConfirmDialog from "./components/ConfirmDialog";
+import ValidationMessage from "./components/ValidationMessage";
 
 // ----------------------------- Utilities -----------------------------
 async function uploadToPresignedURL(url: string, file: File) {
@@ -122,6 +125,7 @@ function Modal({ isOpen, onClose, title, children }: { isOpen: boolean; onClose:
           <button
             onClick={onClose}
             className="text-zinc-400 hover:text-zinc-600 text-xl leading-none"
+            aria-label="Close modal"
           >
             ×
           </button>
@@ -186,6 +190,7 @@ function EditDocModal({ doc, isOpen, onClose, onSave }: {
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const backend = useBackend();
 
   useEffect(() => {
     if (doc) {
@@ -232,16 +237,16 @@ function EditDocModal({ doc, isOpen, onClose, onSave }: {
     <Modal isOpen={isOpen} onClose={onClose} title="Edit Document">
       <form onSubmit={handleSave} className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="text-sm text-zinc-600">Title</label>
-          <Input value={title} onChange={(e) => setTitle(e.target.value)} required />
+          <label htmlFor="edit-title" className="block text-sm text-zinc-600 mb-1">Title</label>
+          <Input id="edit-title" value={title} onChange={(e) => setTitle(e.target.value)} required />
         </div>
         <div>
-          <label className="text-sm text-zinc-600">Version</label>
-          <Input value={version} onChange={(e) => setVersion(e.target.value)} required />
+          <label htmlFor="edit-version" className="block text-sm text-zinc-600 mb-1">Version</label>
+          <Input id="edit-version" value={version} onChange={(e) => setVersion(e.target.value)} required />
         </div>
         <div>
-          <label className="text-sm text-zinc-600">Doc Type</label>
-          <Select value={docType} onChange={(e) => setDocType(e.target.value)}>
+          <label htmlFor="edit-doc-type" className="block text-sm text-zinc-600 mb-1">Doc Type</label>
+          <Select id="edit-doc-type" value={docType} onChange={(e) => setDocType(e.target.value)}>
             <option value="rubric">Rubric</option>
             <option value="style">Style</option>
             <option value="platform">Platform</option>
@@ -251,16 +256,16 @@ function EditDocModal({ doc, isOpen, onClose, onSave }: {
           </Select>
         </div>
         <div>
-          <label className="text-sm text-zinc-600">Status</label>
-          <Select value={status} onChange={(e) => setStatus(e.target.value)}>
+          <label htmlFor="edit-status" className="block text-sm text-zinc-600 mb-1">Status</label>
+          <Select id="edit-status" value={status} onChange={(e) => setStatus(e.target.value)}>
             <option value="active">Active</option>
             <option value="inactive">Inactive</option>
             <option value="experimental">Experimental</option>
           </Select>
         </div>
         <div>
-          <label className="text-sm text-zinc-600">Region</label>
-          <Select value={region} onChange={(e) => setRegion(e.target.value)}>
+          <label htmlFor="edit-region" className="block text-sm text-zinc-600 mb-1">Region</label>
+          <Select id="edit-region" value={region} onChange={(e) => setRegion(e.target.value)}>
             <option value="">None</option>
             <option value="NG">NG</option>
             <option value="GLOBAL">GLOBAL</option>
@@ -270,8 +275,8 @@ function EditDocModal({ doc, isOpen, onClose, onSave }: {
           </Select>
         </div>
         <div>
-          <label className="text-sm text-zinc-600">Platform</label>
-          <Select value={platform} onChange={(e) => setPlatform(e.target.value)}>
+          <label htmlFor="edit-platform" className="block text-sm text-zinc-600 mb-1">Platform</label>
+          <Select id="edit-platform" value={platform} onChange={(e) => setPlatform(e.target.value)}>
             <option value="">None</option>
             <option value="YouTube">YouTube</option>
             <option value="Cinema">Cinema</option>
@@ -280,13 +285,13 @@ function EditDocModal({ doc, isOpen, onClose, onSave }: {
           </Select>
         </div>
         <div className="md:col-span-2">
-          <label className="text-sm text-zinc-600">Tags (comma-separated)</label>
-          <Input value={tags} onChange={(e) => setTags(e.target.value)} />
+          <label htmlFor="edit-tags" className="block text-sm text-zinc-600 mb-1">Tags (comma-separated)</label>
+          <Input id="edit-tags" value={tags} onChange={(e) => setTags(e.target.value)} />
         </div>
         <div className="md:col-span-2 flex items-center gap-3">
           <Button disabled={busy}>{busy ? "Saving…" : "Save Changes"}</Button>
           <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
-          {error && <span className="text-sm text-red-600">{error}</span>}
+          {error && <ValidationMessage type="error" message={error} />}
         </div>
       </form>
     </Modal>
@@ -307,7 +312,8 @@ function DocsTab() {
   const [docs, setDocs] = useState<AdminDoc[]>([]);
   const [editingDoc, setEditingDoc] = useState<AdminDoc | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
-  const [deletingDoc, setDeletingDoc] = useState<AdminDoc | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<AdminDoc | null>(null);
+  const backend = useBackend();
 
   async function loadDocs() {
     try {
@@ -333,6 +339,7 @@ function DocsTab() {
       const presign = await backend.admin.presignDoc({
         filename: file.name,
         contentType: file.type || "application/octet-stream",
+        size: file.size,
         title,
         version,
         doc_type: docType as any,
@@ -359,14 +366,10 @@ function DocsTab() {
   }
 
   async function handleDelete(doc: AdminDoc) {
-    if (!confirm(`Are you sure you want to delete "${doc.title}"? This action cannot be undone.`)) {
-      return;
-    }
-
     try {
       await backend.admin.deleteDoc({ id: doc.id });
       await loadDocs();
-      setDeletingDoc(null);
+      setConfirmDelete(null);
     } catch (e: any) {
       console.error("Delete error:", e);
       setError(e.message);
@@ -387,16 +390,16 @@ function DocsTab() {
       <Card title="Upload Documentation" desc="Guidelines, rubrics, platform notes. Versioned & vectorized on complete.">
         <form onSubmit={handleUpload} className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="text-sm text-zinc-600">Title</label>
-            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Feature Rubric v3.1 (NG)" required />
+            <label htmlFor="doc-title" className="block text-sm text-zinc-600 mb-1">Title</label>
+            <Input id="doc-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Feature Rubric v3.1 (NG)" required />
           </div>
           <div>
-            <label className="text-sm text-zinc-600">Version</label>
-            <Input value={version} onChange={(e) => setVersion(e.target.value)} placeholder="3.1" required />
+            <label htmlFor="doc-version" className="block text-sm text-zinc-600 mb-1">Version</label>
+            <Input id="doc-version" value={version} onChange={(e) => setVersion(e.target.value)} placeholder="3.1" required />
           </div>
           <div>
-            <label className="text-sm text-zinc-600">Doc Type</label>
-            <Select value={docType} onChange={(e) => setDocType(e.target.value)}>
+            <label htmlFor="doc-type" className="block text-sm text-zinc-600 mb-1">Doc Type</label>
+            <Select id="doc-type" value={docType} onChange={(e) => setDocType(e.target.value)}>
               <option value="rubric">Rubric</option>
               <option value="style">Style</option>
               <option value="platform">Platform</option>
@@ -406,8 +409,8 @@ function DocsTab() {
             </Select>
           </div>
           <div>
-            <label className="text-sm text-zinc-600">Region</label>
-            <Select value={region} onChange={(e) => setRegion(e.target.value)}>
+            <label htmlFor="doc-region" className="block text-sm text-zinc-600 mb-1">Region</label>
+            <Select id="doc-region" value={region} onChange={(e) => setRegion(e.target.value)}>
               <option value="NG">NG</option>
               <option value="GLOBAL">GLOBAL</option>
               <option value="KE">KE</option>
@@ -416,8 +419,8 @@ function DocsTab() {
             </Select>
           </div>
           <div>
-            <label className="text-sm text-zinc-600">Platform</label>
-            <Select value={platform} onChange={(e) => setPlatform(e.target.value)}>
+            <label htmlFor="doc-platform" className="block text-sm text-zinc-600 mb-1">Platform</label>
+            <Select id="doc-platform" value={platform} onChange={(e) => setPlatform(e.target.value)}>
               <option value="YouTube">YouTube</option>
               <option value="Cinema">Cinema</option>
               <option value="VOD">VOD</option>
@@ -425,16 +428,16 @@ function DocsTab() {
             </Select>
           </div>
           <div>
-            <label className="text-sm text-zinc-600">Tags (comma-separated)</label>
-            <Input value={tags} onChange={(e) => setTags(e.target.value)} />
+            <label htmlFor="doc-tags" className="block text-sm text-zinc-600 mb-1">Tags (comma-separated)</label>
+            <Input id="doc-tags" value={tags} onChange={(e) => setTags(e.target.value)} />
           </div>
           <div className="md:col-span-2">
-            <label className="text-sm text-zinc-600">File</label>
-            <Input type="file" accept=".pdf,.docx,.md,.txt" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+            <label htmlFor="doc-file" className="block text-sm text-zinc-600 mb-1">File</label>
+            <Input id="doc-file" type="file" accept=".pdf,.docx,.md,.txt" onChange={(e) => setFile(e.target.files?.[0] || null)} />
           </div>
           <div className="md:col-span-2 flex items-center gap-3">
             <Button disabled={busy}>{busy ? "Uploading…" : "Upload & Vectorize"}</Button>
-            {error && <span className="text-sm text-red-600">{error}</span>}
+            {error && <ValidationMessage type="error" message={error} />}
           </div>
         </form>
       </Card>
@@ -486,7 +489,7 @@ function DocsTab() {
                       <Button
                         variant="danger"
                         className="px-2 py-1 text-xs"
-                        onClick={() => handleDelete(d)}
+                        onClick={() => setConfirmDelete(d)}
                       >
                         Delete
                       </Button>
@@ -515,165 +518,270 @@ function DocsTab() {
         }}
         onSave={handleEditSave}
       />
+
+      <ConfirmDialog
+        isOpen={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={() => confirmDelete && handleDelete(confirmDelete)}
+        title="Delete Document"
+        message={`Are you sure you want to delete "${confirmDelete?.title}"? This action cannot be undone and will remove all associated chunks.`}
+        confirmText="Delete"
+        variant="danger"
+      />
     </div>
   );
 }
 
 // ----------------------------- Submissions Tab -----------------------------
 function SubmissionsTab() {
-  const [file, setFile] = useState<File | null>(null);
-  const [writerName, setWriterName] = useState("");
-  const [writerEmail, setWriterEmail] = useState("");
-  const [scriptTitle, setScriptTitle] = useState("");
-  const [format, setFormat] = useState("youtube_movie");
-  const [draftVersion, setDraftVersion] = useState("1st");
-  const [genre, setGenre] = useState("Drama");
-  const [region, setRegion] = useState("NG");
-  const [platform, setPlatform] = useState("YouTube");
-  const [busy, setBusy] = useState(false);
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [submissionId, setSubmissionId] = useState<string | null>(null);
+  const [filters, setFilters] = useState({
+    status: "",
+    writer_email: "",
+    region: "",
+    platform: "",
+    from_date: "",
+    to_date: "",
+  });
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(0);
+  const pageSize = 20;
+  const backend = useBackend();
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    if (!file) return setError("Please choose a script file.");
-    if (file.size > 20 * 1024 * 1024) return setError("File too large (20 MB max).");
-    setBusy(true);
+  async function loadSubmissions() {
     try {
-      // 1) presign for script
-      const presign = await backend.submissions.presignScript({
-        filename: file.name,
-        contentType: file.type || "application/pdf",
-      });
+      setError(null);
+      setLoading(true);
+      
+      const params: any = {
+        limit: pageSize,
+        offset: page * pageSize,
+      };
 
-      await uploadToPresignedURL(presign.uploadUrl, file);
+      // Add filters
+      if (filters.status) params.status = filters.status;
+      if (filters.writer_email) params.writer_email = filters.writer_email;
+      if (filters.region) params.region = filters.region;
+      if (filters.platform) params.platform = filters.platform;
+      if (filters.from_date) params.from_date = filters.from_date;
+      if (filters.to_date) params.to_date = filters.to_date;
 
-      // 2) create submission
-      const created = await backend.submissions.create({
-        writer_name: writerName,
-        writer_email: writerEmail,
-        script_title: scriptTitle,
-        format: format as any,
-        draft_version: draftVersion as any,
-        genre,
-        region: region as any,
-        platform: platform as any,
-        file_s3_key: presign.s3Key,
-      });
-
-      // 3) kick review immediately - pass submissionId as path parameter
-      try {
-        await backend.review.run({ submissionId: created.submissionId });
-      } catch (err) {
-        console.error("Failed to start review:", err);
-        // Continue anyway - review can be started later
-      }
-
-      setSubmissionId(created.submissionId);
-      setFile(null);
-      setWriterName("");
-      setWriterEmail("");
-      setScriptTitle("");
-      setGenre("Drama");
+      const response = await backend.submissions.listAdminSubmissions(params);
+      setSubmissions(response.items);
+      setTotal(response.total);
     } catch (e: any) {
-      console.error("Submission error:", e);
+      console.error("Failed to load submissions:", e);
       setError(e.message);
     } finally {
-      setBusy(false);
+      setLoading(false);
     }
   }
 
-  if (submissionId) {
-    return (
-      <div className="grid grid-cols-1 gap-6">
-        <Card title="Submission Created" desc="Review process has been started">
-          <div className="space-y-4">
-            <p className="text-sm">
-              Submission ID: <span className="font-mono font-semibold">{submissionId}</span>
-            </p>
-            <div className="flex gap-3">
-              <Button onClick={async () => {
-                const ok = await safeCopyToClipboard(submissionId);
-                if (!ok) alert('Copy failed. Select the text and press Ctrl/Cmd+C.');
-              }}>Copy ID</Button>
-              <Button 
-                variant="secondary"
-                onClick={() => setSubmissionId(null)}
-              >
-                Create Another
-              </Button>
-            </div>
-          </div>
-        </Card>
-      </div>
-    );
+  useEffect(() => {
+    loadSubmissions();
+  }, [page, filters]);
+
+  function handleFilterChange(key: string, value: string) {
+    setFilters(prev => ({ ...prev, [key]: value }));
+    setPage(0); // Reset to first page when filtering
   }
+
+  async function viewReport(submissionId: string) {
+    try {
+      const report = await backend.review.getReport({ submissionId });
+      // In production, open in modal or new tab
+      console.log("Report:", report);
+      alert(`Report loaded for submission ${submissionId}. Check console for details.`);
+    } catch (e: any) {
+      console.error("Failed to load report:", e);
+      alert("Report not ready yet or failed to load");
+    }
+  }
+
+  const totalPages = Math.ceil(total / pageSize);
 
   return (
     <div className="grid grid-cols-1 gap-6">
-      <Card title="New Submission" desc="Upload script and kick off the review">
-        <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <Card title="All Submissions" desc={`${total} total submissions`}>
+        {/* Filters */}
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-6">
           <div>
-            <label className="text-sm text-zinc-600">Writer Name</label>
-            <Input value={writerName} onChange={(e) => setWriterName(e.target.value)} required />
-          </div>
-          <div>
-            <label className="text-sm text-zinc-600">Writer Email</label>
-            <Input type="email" value={writerEmail} onChange={(e) => setWriterEmail(e.target.value)} required />
-          </div>
-          <div>
-            <label className="text-sm text-zinc-600">Script Title</label>
-            <Input value={scriptTitle} onChange={(e) => setScriptTitle(e.target.value)} required />
-          </div>
-          <div>
-            <label className="text-sm text-zinc-600">Format</label>
-            <Select value={format} onChange={(e) => setFormat(e.target.value)}>
-              <option value="youtube_movie">YouTube Movie</option>
-              <option value="feature">Feature</option>
-              <option value="series">Series</option>
+            <label htmlFor="filter-status" className="block text-sm text-zinc-600 mb-1">Status</label>
+            <Select
+              id="filter-status"
+              value={filters.status}
+              onChange={(e) => handleFilterChange("status", e.target.value)}
+            >
+              <option value="">All</option>
+              <option value="queued">Queued</option>
+              <option value="processing">Processing</option>
+              <option value="completed">Completed</option>
+              <option value="failed">Failed</option>
             </Select>
           </div>
           <div>
-            <label className="text-sm text-zinc-600">Draft Version</label>
-            <Select value={draftVersion} onChange={(e) => setDraftVersion(e.target.value)}>
-              <option value="1st">1st</option>
-              <option value="2nd">2nd</option>
-              <option value="3rd">3rd</option>
-            </Select>
+            <label htmlFor="filter-email" className="block text-sm text-zinc-600 mb-1">Writer Email</label>
+            <Input
+              id="filter-email"
+              value={filters.writer_email}
+              onChange={(e) => handleFilterChange("writer_email", e.target.value)}
+              placeholder="Search email..."
+            />
           </div>
           <div>
-            <label className="text-sm text-zinc-600">Genre</label>
-            <Input value={genre} onChange={(e) => setGenre(e.target.value)} />
-          </div>
-          <div>
-            <label className="text-sm text-zinc-600">Region</label>
-            <Select value={region} onChange={(e) => setRegion(e.target.value)}>
+            <label htmlFor="filter-region" className="block text-sm text-zinc-600 mb-1">Region</label>
+            <Select
+              id="filter-region"
+              value={filters.region}
+              onChange={(e) => handleFilterChange("region", e.target.value)}
+            >
+              <option value="">All</option>
               <option value="NG">NG</option>
-              <option value="GLOBAL">GLOBAL</option>
               <option value="KE">KE</option>
               <option value="GH">GH</option>
               <option value="ZA">ZA</option>
+              <option value="GLOBAL">GLOBAL</option>
             </Select>
           </div>
           <div>
-            <label className="text-sm text-zinc-600">Platform</label>
-            <Select value={platform} onChange={(e) => setPlatform(e.target.value)}>
+            <label htmlFor="filter-platform" className="block text-sm text-zinc-600 mb-1">Platform</label>
+            <Select
+              id="filter-platform"
+              value={filters.platform}
+              onChange={(e) => handleFilterChange("platform", e.target.value)}
+            >
+              <option value="">All</option>
               <option value="YouTube">YouTube</option>
               <option value="Cinema">Cinema</option>
               <option value="VOD">VOD</option>
               <option value="TV">TV</option>
             </Select>
           </div>
-          <div className="md:col-span-2">
-            <label className="text-sm text-zinc-600">Script File</label>
-            <Input type="file" accept=".pdf,.docx,.fdx,.txt" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+          <div>
+            <label htmlFor="filter-from" className="block text-sm text-zinc-600 mb-1">From Date</label>
+            <Input
+              id="filter-from"
+              type="date"
+              value={filters.from_date}
+              onChange={(e) => handleFilterChange("from_date", e.target.value)}
+            />
           </div>
-          <div className="md:col-span-2 flex items-center gap-3">
-            <Button disabled={busy}>{busy ? "Submitting…" : "Submit & Run Review"}</Button>
-            {error && <span className="text-sm text-red-600">{error}</span>}
+          <div>
+            <label htmlFor="filter-to" className="block text-sm text-zinc-600 mb-1">To Date</label>
+            <Input
+              id="filter-to"
+              type="date"
+              value={filters.to_date}
+              onChange={(e) => handleFilterChange("to_date", e.target.value)}
+            />
           </div>
-        </form>
+        </div>
+
+        {error && <ValidationMessage type="error" message={error} className="mb-4" />}
+
+        {loading ? (
+          <div className="text-center py-8">
+            <p className="text-zinc-600">Loading submissions...</p>
+          </div>
+        ) : (
+          <>
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead>
+                  <tr className="text-left text-zinc-600 border-b">
+                    <th className="py-3">Writer</th>
+                    <th className="py-3">Script Title</th>
+                    <th className="py-3">Format</th>
+                    <th className="py-3">Status</th>
+                    <th className="py-3">Region</th>
+                    <th className="py-3">Submitted</th>
+                    <th className="py-3">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {submissions.map((submission) => (
+                    <tr key={submission.id} className="border-b border-zinc-100">
+                      <td className="py-3">
+                        <div>
+                          <p className="font-medium">{submission.writer_name}</p>
+                          <p className="text-xs text-zinc-500">{submission.writer_email}</p>
+                        </div>
+                      </td>
+                      <td className="py-3">
+                        <div>
+                          <p className="font-medium">{submission.script_title}</p>
+                          <p className="text-xs text-zinc-500">
+                            {submission.draft_version} • {submission.genre}
+                          </p>
+                        </div>
+                      </td>
+                      <td className="py-3">
+                        <Tag>{submission.format}</Tag>
+                      </td>
+                      <td className="py-3">
+                        <Tag>{submission.status}</Tag>
+                      </td>
+                      <td className="py-3">{submission.region || "—"}</td>
+                      <td className="py-3">{new Date(submission.created_at).toLocaleDateString()}</td>
+                      <td className="py-3">
+                        <div className="flex gap-2">
+                          {submission.status === "completed" && (
+                            <Button
+                              variant="primary"
+                              className="px-3 py-1 text-xs"
+                              onClick={() => viewReport(submission.id)}
+                            >
+                              View Report
+                            </Button>
+                          )}
+                          <Button
+                            variant="secondary"
+                            className="px-3 py-1 text-xs"
+                            onClick={async () => {
+                              const ok = await safeCopyToClipboard(submission.id);
+                              if (!ok) alert('Copy failed');
+                            }}
+                          >
+                            Copy ID
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between mt-6">
+                <p className="text-sm text-zinc-600">
+                  Showing {page * pageSize + 1} to {Math.min((page + 1) * pageSize, total)} of {total} submissions
+                </p>
+                <div className="flex gap-2">
+                  <Button
+                    variant="secondary"
+                    disabled={page === 0}
+                    onClick={() => setPage(page - 1)}
+                    className="px-3 py-1 text-sm"
+                  >
+                    Previous
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    disabled={page >= totalPages - 1}
+                    onClick={() => setPage(page + 1)}
+                    className="px-3 py-1 text-sm"
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </Card>
     </div>
   );
@@ -686,6 +794,7 @@ function ReportsTab() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [editorNotes, setEditorNotes] = useState("");
+  const backend = useBackend();
 
   async function fetchReport(e: React.FormEvent) {
     e.preventDefault();
@@ -716,10 +825,16 @@ function ReportsTab() {
     <div className="grid grid-cols-1 gap-6">
       <Card title="Find Report" desc="Enter Submission ID to view the latest report">
         <form onSubmit={fetchReport} className="flex gap-3 max-w-2xl">
-          <Input placeholder="submission-id" value={submissionId} onChange={(e) => setSubmissionId(e.target.value)} required />
+          <Input 
+            placeholder="submission-id" 
+            value={submissionId} 
+            onChange={(e) => setSubmissionId(e.target.value)} 
+            required 
+            aria-label="Submission ID"
+          />
           <Button disabled={loading}>{loading ? "Loading..." : "Load"}</Button>
         </form>
-        {error && <p className="text-sm text-red-600 mt-2">{error}</p>}
+        {error && <ValidationMessage type="error" message={error} className="mt-2" />}
       </Card>
 
       {report && (
@@ -741,7 +856,13 @@ function ReportsTab() {
 
           <div className="mt-6 border-t pt-4">
             <h4 className="font-semibold mb-2">Human Reviewer Notes (local draft)</h4>
-            <Textarea rows={5} placeholder="Edit or supplement recommendations… (wire to a PATCH /reports/:id later)" value={editorNotes} onChange={(e) => setEditorNotes(e.target.value)} />
+            <Textarea 
+              rows={5} 
+              placeholder="Edit or supplement recommendations… (wire to a PATCH /reports/:id later)" 
+              value={editorNotes} 
+              onChange={(e) => setEditorNotes(e.target.value)}
+              aria-label="Editor notes"
+            />
             <div className="mt-3 flex gap-2">
               <Button onClick={async () => {
                 const ok = await safeCopyToClipboard(editorNotes || "");
@@ -842,6 +963,22 @@ function Tabs({ value, onChange }: { value: string; onChange: (v: string) => voi
 
 export default function AdminApp() {
   const [tab, setTab] = useState("docs");
+  const { user, logout } = useAuth();
+
+  // Check if user has admin access
+  if (!user || !['admin', 'editor', 'viewer'].includes(user.role)) {
+    return (
+      <div className="min-h-screen bg-zinc-50 flex items-center justify-center">
+        <div className="max-w-md w-full">
+          <div className="text-center mb-6">
+            <h1 className="text-2xl font-bold">Admin Access Required</h1>
+            <p className="text-zinc-600 mt-2">Please sign in with an admin account</p>
+          </div>
+          <LoginForm showRegister={false} />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-900">
@@ -851,7 +988,17 @@ export default function AdminApp() {
             <h1 className="text-xl font-bold">Script Review Admin</h1>
             <p className="text-xs text-zinc-600">YouTube‑first • All agents enabled • 80‑day retention</p>
           </div>
-          <Tabs value={tab} onChange={setTab} />
+          <div className="flex items-center gap-4">
+            <Tabs value={tab} onChange={setTab} />
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-zinc-600">
+                {user.name} ({user.role})
+              </span>
+              <Button variant="secondary" className="px-3 py-1 text-sm" onClick={logout}>
+                Logout
+              </Button>
+            </div>
+          </div>
         </div>
       </header>
 

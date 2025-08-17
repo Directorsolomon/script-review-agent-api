@@ -1,5 +1,8 @@
 import React, { useMemo, useState } from "react";
-import backend from "~backend/client";
+import { AuthProvider, useAuth, useBackend } from "./components/AuthProvider";
+import LoginForm from "./components/LoginForm";
+import UserDashboard from "./components/UserDashboard";
+import ValidationMessage from "./components/ValidationMessage";
 import AdminApp from "./AdminApp";
 
 // ----------------------------- Utils -----------------------------
@@ -139,6 +142,7 @@ function SubmissionForm() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ submissionId: string } | null>(null);
+  const backend = useBackend();
 
   const fileHint = "PDF/DOCX/FDX • Max 20 MB";
 
@@ -164,6 +168,7 @@ function SubmissionForm() {
       const presign = await backend.submissions.presignScript({
         filename: file.name,
         contentType: file.type || "application/pdf",
+        size: file.size,
       });
 
       // Upload file to S3
@@ -234,40 +239,40 @@ function SubmissionForm() {
   return (
     <form onSubmit={handleSubmit} className="grid grid-cols-1 md:grid-cols-2 gap-4">
       <div>
-        <label className="text-sm text-zinc-600">Writer Name</label>
-        <Input value={writerName} onChange={(e) => setWriterName(e.target.value)} required />
+        <label htmlFor="writer-name" className="block text-sm text-zinc-600 mb-1">Writer Name</label>
+        <Input id="writer-name" value={writerName} onChange={(e) => setWriterName(e.target.value)} required />
       </div>
       <div>
-        <label className="text-sm text-zinc-600">Writer Email</label>
-        <Input type="email" value={writerEmail} onChange={(e) => setWriterEmail(e.target.value)} required />
+        <label htmlFor="writer-email" className="block text-sm text-zinc-600 mb-1">Writer Email</label>
+        <Input id="writer-email" type="email" value={writerEmail} onChange={(e) => setWriterEmail(e.target.value)} required />
       </div>
       <div>
-        <label className="text-sm text-zinc-600">Script Title</label>
-        <Input value={scriptTitle} onChange={(e) => setScriptTitle(e.target.value)} required />
+        <label htmlFor="script-title" className="block text-sm text-zinc-600 mb-1">Script Title</label>
+        <Input id="script-title" value={scriptTitle} onChange={(e) => setScriptTitle(e.target.value)} required />
       </div>
       <div>
-        <label className="text-sm text-zinc-600">Format</label>
-        <Select value={format} onChange={(e) => setFormat(e.target.value)}>
+        <label htmlFor="format" className="block text-sm text-zinc-600 mb-1">Format</label>
+        <Select id="format" value={format} onChange={(e) => setFormat(e.target.value)}>
           <option value="youtube_movie">YouTube Movie</option>
           <option value="feature">Feature</option>
           <option value="series">Series</option>
         </Select>
       </div>
       <div>
-        <label className="text-sm text-zinc-600">Draft Version</label>
-        <Select value={draftVersion} onChange={(e) => setDraftVersion(e.target.value)}>
+        <label htmlFor="draft-version" className="block text-sm text-zinc-600 mb-1">Draft Version</label>
+        <Select id="draft-version" value={draftVersion} onChange={(e) => setDraftVersion(e.target.value)}>
           <option value="1st">1st</option>
           <option value="2nd">2nd</option>
           <option value="3rd">3rd</option>
         </Select>
       </div>
       <div>
-        <label className="text-sm text-zinc-600">Genre</label>
-        <Input value={genre} onChange={(e) => setGenre(e.target.value)} placeholder="Drama" />
+        <label htmlFor="genre" className="block text-sm text-zinc-600 mb-1">Genre</label>
+        <Input id="genre" value={genre} onChange={(e) => setGenre(e.target.value)} placeholder="Drama" />
       </div>
       <div>
-        <label className="text-sm text-zinc-600">Region</label>
-        <Select value={region} onChange={(e) => setRegion(e.target.value)}>
+        <label htmlFor="region" className="block text-sm text-zinc-600 mb-1">Region</label>
+        <Select id="region" value={region} onChange={(e) => setRegion(e.target.value)}>
           <option value="NG">NG</option>
           <option value="GLOBAL">GLOBAL</option>
           <option value="KE">KE</option>
@@ -276,8 +281,8 @@ function SubmissionForm() {
         </Select>
       </div>
       <div>
-        <label className="text-sm text-zinc-600">Platform</label>
-        <Select value={platform} onChange={(e) => setPlatform(e.target.value)}>
+        <label htmlFor="platform" className="block text-sm text-zinc-600 mb-1">Platform</label>
+        <Select id="platform" value={platform} onChange={(e) => setPlatform(e.target.value)}>
           <option value="YouTube">YouTube</option>
           <option value="Cinema">Cinema</option>
           <option value="VOD">VOD</option>
@@ -285,16 +290,26 @@ function SubmissionForm() {
         </Select>
       </div>
       <div className="md:col-span-2">
-        <label className="text-sm text-zinc-600">Script File <span className="text-zinc-400">({fileHint})</span></label>
-        <Input type="file" accept=".pdf,.docx,.fdx,.txt" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+        <label htmlFor="script-file" className="block text-sm text-zinc-600 mb-1">
+          Script File <span className="text-zinc-400">({fileHint})</span>
+        </label>
+        <Input id="script-file" type="file" accept=".pdf,.docx,.fdx,.txt" onChange={(e) => setFile(e.target.files?.[0] || null)} />
       </div>
       <div className="md:col-span-2 flex items-center gap-2">
-        <input id="agree" type="checkbox" className="h-4 w-4" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
-        <label htmlFor="agree" className="text-sm text-zinc-600">I agree to the 80‑day data retention policy and the review terms.</label>
+        <input 
+          id="agree" 
+          type="checkbox" 
+          className="h-4 w-4" 
+          checked={agree} 
+          onChange={(e) => setAgree(e.target.checked)} 
+        />
+        <label htmlFor="agree" className="text-sm text-zinc-600">
+          I agree to the <a href="/privacy" className="text-zinc-900 hover:underline">80‑day data retention policy</a> and the <a href="/terms" className="text-zinc-900 hover:underline">review terms</a>.
+        </label>
       </div>
       <div className="md:col-span-2 flex items-center gap-3">
         <Button disabled={busy}>{busy ? "Submitting…" : "Submit for Review"}</Button>
-        {error && <span className="text-sm text-red-600">{error}</span>}
+        {error && <ValidationMessage type="error" message={error} />}
       </div>
     </form>
   );
@@ -306,6 +321,7 @@ function StatusLookup() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<any | null>(null);
+  const backend = useBackend();
 
   async function fetchReport(e: React.FormEvent) {
     e.preventDefault();
@@ -346,11 +362,12 @@ function StatusLookup() {
               value={submissionId} 
               onChange={(e) => setSubmissionId(e.target.value)} 
               required 
+              aria-label="Submission ID"
             />
-            <Button disabled={loading}>Load</Button>
+            <Button disabled={loading}>{loading ? "Loading..." : "Load"}</Button>
           </form>
           {loading && <p className="mt-3 text-sm text-zinc-600">Loading…</p>}
-          {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
+          {error && <ValidationMessage type="error" message={error} className="mt-3" />}
 
           {view && (
             <div className="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -436,9 +453,209 @@ function FAQ() {
   );
 }
 
+// ----------------------------- Privacy & Terms Pages -----------------------------
+function PrivacyPage() {
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-12">
+      <div className="rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm">
+        <h1 className="text-2xl font-bold mb-6">Privacy Policy & Data Retention</h1>
+        
+        <div className="prose prose-zinc max-w-none">
+          <h2>Data Collection</h2>
+          <p>We collect the following information when you submit a script for review:</p>
+          <ul>
+            <li>Your name and email address</li>
+            <li>Script title, format, and metadata</li>
+            <li>The script file you upload</li>
+            <li>Generated embeddings and analysis data</li>
+          </ul>
+
+          <h2>Data Usage</h2>
+          <p>Your data is used solely for:</p>
+          <ul>
+            <li>Generating script reviews and feedback</li>
+            <li>Improving our review algorithms</li>
+            <li>Communicating with you about your submission</li>
+          </ul>
+
+          <h2>Data Retention</h2>
+          <p>
+            <strong>80-Day Retention Policy:</strong> All submitted scripts, personal information, 
+            and generated analysis are automatically deleted after 80 days from submission. 
+            This includes:
+          </p>
+          <ul>
+            <li>Original script files</li>
+            <li>Text embeddings and chunks</li>
+            <li>Review reports and analysis</li>
+            <li>Personal information</li>
+          </ul>
+
+          <h2>Data Security</h2>
+          <p>We implement industry-standard security measures including:</p>
+          <ul>
+            <li>Encrypted data transmission (HTTPS)</li>
+            <li>Secure cloud storage with access controls</li>
+            <li>Regular security audits and updates</li>
+            <li>Limited access to authorized personnel only</li>
+          </ul>
+
+          <h2>Your Rights</h2>
+          <p>You have the right to:</p>
+          <ul>
+            <li>Request deletion of your data before the 80-day period</li>
+            <li>Access copies of your submitted data</li>
+            <li>Correct any inaccurate personal information</li>
+            <li>Withdraw consent for data processing</li>
+          </ul>
+
+          <h2>Contact</h2>
+          <p>For privacy-related questions, contact us at privacy@scriptreview.com</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function TermsPage() {
+  return (
+    <div className="max-w-4xl mx-auto px-4 py-12">
+      <div className="rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm">
+        <h1 className="text-2xl font-bold mb-6">Terms of Service</h1>
+        
+        <div className="prose prose-zinc max-w-none">
+          <h2>Service Description</h2>
+          <p>
+            Script Review provides automated analysis and feedback for film and video scripts, 
+            with a focus on YouTube-first content and Nollywood storytelling conventions.
+          </p>
+
+          <h2>Acceptable Use</h2>
+          <p>You agree to:</p>
+          <ul>
+            <li>Submit only original content or content you have rights to</li>
+            <li>Provide accurate information in your submissions</li>
+            <li>Use the service for legitimate creative purposes</li>
+            <li>Respect intellectual property rights</li>
+          </ul>
+
+          <h2>Prohibited Content</h2>
+          <p>Do not submit scripts containing:</p>
+          <ul>
+            <li>Illegal content or activities</li>
+            <li>Hate speech or discriminatory content</li>
+            <li>Explicit violence or graphic content</li>
+            <li>Copyrighted material without permission</li>
+          </ul>
+
+          <h2>Review Process</h2>
+          <p>
+            Our AI-powered system analyzes scripts against industry rubrics and platform guidelines. 
+            Reviews are generated automatically and may be supplemented by human reviewers. 
+            We do not guarantee specific outcomes or acceptance by any platform or studio.
+          </p>
+
+          <h2>Intellectual Property</h2>
+          <p>
+            You retain all rights to your submitted scripts. We do not claim ownership of your content. 
+            Our analysis and feedback are provided as a service and do not transfer any rights to us.
+          </p>
+
+          <h2>Limitation of Liability</h2>
+          <p>
+            Script Review provides feedback for educational and improvement purposes only. 
+            We are not responsible for any decisions made based on our analysis or any 
+            outcomes related to your script's development or distribution.
+          </p>
+
+          <h2>Service Availability</h2>
+          <p>
+            We strive to provide reliable service but do not guarantee 100% uptime. 
+            We reserve the right to modify or discontinue the service with reasonable notice.
+          </p>
+
+          <h2>Changes to Terms</h2>
+          <p>
+            We may update these terms periodically. Continued use of the service constitutes 
+            acceptance of any changes.
+          </p>
+
+          <h2>Contact</h2>
+          <p>For questions about these terms, contact us at legal@scriptreview.com</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ----------------------------- Public App -----------------------------
 function PublicApp() {
   const [started, setStarted] = useState(false);
+  const { user, logout } = useAuth();
+  const { currentPath, navigate } = useRouter();
+
+  // Handle routing
+  if (currentPath === '/privacy') {
+    return (
+      <div className="min-h-screen bg-zinc-50 text-zinc-900">
+        <header className="sticky top-0 z-10 backdrop-blur supports-[backdrop-filter]:bg-white/70 bg-white border-b border-zinc-200">
+          <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+            <div>
+              <button onClick={() => navigate('/')} className="text-xl font-bold hover:text-zinc-600">
+                Script Review
+              </button>
+            </div>
+            <div className="flex items-center gap-3">
+              <a href="/" className="px-4 py-1.5 rounded-2xl text-sm border hover:bg-zinc-50">Home</a>
+            </div>
+          </div>
+        </header>
+        <PrivacyPage />
+      </div>
+    );
+  }
+
+  if (currentPath === '/terms') {
+    return (
+      <div className="min-h-screen bg-zinc-50 text-zinc-900">
+        <header className="sticky top-0 z-10 backdrop-blur supports-[backdrop-filter]:bg-white/70 bg-white border-b border-zinc-200">
+          <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+            <div>
+              <button onClick={() => navigate('/')} className="text-xl font-bold hover:text-zinc-600">
+                Script Review
+              </button>
+            </div>
+            <div className="flex items-center gap-3">
+              <a href="/" className="px-4 py-1.5 rounded-2xl text-sm border hover:bg-zinc-50">Home</a>
+            </div>
+          </div>
+        </header>
+        <TermsPage />
+      </div>
+    );
+  }
+
+  if (currentPath === '/dashboard' && user) {
+    return (
+      <div className="min-h-screen bg-zinc-50 text-zinc-900">
+        <header className="sticky top-0 z-10 backdrop-blur supports-[backdrop-filter]:bg-white/70 bg-white border-b border-zinc-200">
+          <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+            <div>
+              <button onClick={() => navigate('/')} className="text-xl font-bold hover:text-zinc-600">
+                Script Review
+              </button>
+              <p className="text-xs text-zinc-600">YouTube‑first • Evidence‑based notes • Nollywood‑aware</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-sm text-zinc-600">Welcome, {user.name}</span>
+              <Button onClick={logout} className="px-3 py-1 text-sm">Logout</Button>
+            </div>
+          </div>
+        </header>
+        <UserDashboard />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-900">
@@ -451,6 +668,16 @@ function PublicApp() {
           <div className="hidden sm:flex items-center gap-3">
             <a href="#status" className="px-4 py-1.5 rounded-2xl text-sm border hover:bg-zinc-50">Status</a>
             <a href="#submit" className="px-4 py-1.5 rounded-2xl text-sm border hover:bg-zinc-50">Submit</a>
+            {user ? (
+              <>
+                <button onClick={() => navigate('/dashboard')} className="px-4 py-1.5 rounded-2xl text-sm border hover:bg-zinc-50">
+                  Dashboard
+                </button>
+                <Button onClick={logout} className="px-3 py-1 text-sm">Logout</Button>
+              </>
+            ) : (
+              <LoginForm showRegister={true} />
+            )}
             <a href="/admin" className="px-4 py-1.5 rounded-2xl text-sm border hover:bg-zinc-50">Admin</a>
           </div>
         </div>
@@ -474,15 +701,21 @@ function PublicApp() {
       <FAQ />
 
       <footer className="max-w-6xl mx-auto px-4 py-10 text-xs text-zinc-500">
-        <p>By submitting, you agree to an 80‑day retention policy and our respectful‑use terms.</p>
+        <div className="flex justify-between items-center">
+          <p>By submitting, you agree to an 80‑day retention policy and our respectful‑use terms.</p>
+          <div className="flex gap-4">
+            <a href="/privacy" className="hover:text-zinc-700">Privacy Policy</a>
+            <a href="/terms" className="hover:text-zinc-700">Terms of Service</a>
+          </div>
+        </div>
       </footer>
     </div>
   );
 }
 
 // ----------------------------- Main App with Routing -----------------------------
-export default function App() {
-  const { currentPath, navigate } = useRouter();
+function AppInner() {
+  const { currentPath } = useRouter();
 
   // Simple routing based on pathname
   if (currentPath.startsWith('/admin')) {
@@ -490,4 +723,12 @@ export default function App() {
   }
 
   return <PublicApp />;
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppInner />
+    </AuthProvider>
+  );
 }

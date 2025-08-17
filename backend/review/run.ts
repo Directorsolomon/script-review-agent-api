@@ -1,6 +1,7 @@
 import { api, APIError } from "encore.dev/api";
 import { db } from "../database/db";
 import { orchestrator } from "~encore/clients";
+import { getAuthData } from "~encore/auth";
 
 export interface RunReviewRequest {
   submissionId: string;
@@ -10,21 +11,28 @@ export interface RunReviewResponse {
   ok: boolean;
 }
 
-// Starts the review process for a submission
+// Starts the review process for a submission with auth check
 export const run = api<RunReviewRequest, RunReviewResponse>(
-  { expose: true, method: "POST", path: "/review/run/:submissionId" },
+  { auth: true, expose: true, method: "POST", path: "/review/run/:submissionId" },
   async (req) => {
+    const auth = getAuthData()!;
+
     // Validate input
     if (!req.submissionId || typeof req.submissionId !== 'string') {
       throw APIError.invalidArgument("Invalid submission ID");
     }
 
     const submission = await db.queryRow`
-      SELECT id, file_s3_key FROM submissions WHERE id = ${req.submissionId}
+      SELECT id, file_s3_key, writer_email FROM submissions WHERE id = ${req.submissionId}
     `;
 
     if (!submission) {
       throw APIError.notFound("Submission not found");
+    }
+
+    // Check if user has access to this submission
+    if (auth.role === 'user' && submission.writer_email !== auth.email) {
+      throw APIError.permissionDenied("Access denied");
     }
 
     if (!submission.file_s3_key) {
