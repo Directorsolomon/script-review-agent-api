@@ -172,7 +172,12 @@ function SubmissionForm() {
       headers: { "Content-Type": file.type }, 
       body: file 
     });
-    if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+    if (!res.ok) {
+      if (res.status === 413) {
+        throw new Error("File too large for upload. Please reduce file size and try again.");
+      }
+      throw new Error(`Upload failed: ${res.status}`);
+    }
   }
 
   function validateForm() {
@@ -198,8 +203,11 @@ function SubmissionForm() {
     if (!formData.file) {
       newErrors.file = "Please choose a script file";
     } else {
-      if (formData.file.size > 20 * 1024 * 1024) {
-        newErrors.file = "File too large (20 MB max)";
+      // Check file size (15MB for scripts)
+      const maxSize = 15 * 1024 * 1024; // 15MB
+      if (formData.file.size > maxSize) {
+        const fileSizeMB = Math.round(formData.file.size / 1024 / 1024 * 10) / 10;
+        newErrors.file = `File too large: ${fileSizeMB}MB (maximum 15MB for scripts)`;
       }
       
       const allowedTypes = [
@@ -281,7 +289,23 @@ function SubmissionForm() {
       
     } catch (e: any) {
       console.error("Submission error:", e);
-      setErrors({ submit: e.message || "Failed to submit script" });
+      
+      // Handle specific error types
+      let errorMessage = "Failed to submit script";
+      
+      if (e.message?.includes("File too large") || e.message?.includes("maximum")) {
+        errorMessage = e.message;
+      } else if (e.message?.includes("Unsupported file type")) {
+        errorMessage = e.message;
+      } else if (e.message?.includes("413") || e.message?.includes("Payload Too Large")) {
+        errorMessage = "File too large for upload. Please reduce file size to under 15MB and try again.";
+      } else if (e.message?.includes("invalid_argument")) {
+        errorMessage = e.message.replace("invalid_argument: ", "");
+      } else if (e.message) {
+        errorMessage = e.message;
+      }
+      
+      setErrors({ submit: errorMessage });
     } finally {
       setBusy(false);
     }
@@ -445,8 +469,13 @@ function SubmissionForm() {
             error={!!errors.file}
           />
           <p className="text-sm text-gray-500">
-            Supported formats: PDF, DOCX, DOC, FDX, TXT • Maximum size: 20 MB
+            Supported formats: PDF, DOCX, DOC, FDX, TXT • Maximum size: 15 MB
           </p>
+          {formData.file && (
+            <div className="text-sm text-gray-600">
+              Selected: {formData.file.name} ({Math.round(formData.file.size / 1024 / 1024 * 10) / 10} MB)
+            </div>
+          )}
         </div>
       </FormField>
 

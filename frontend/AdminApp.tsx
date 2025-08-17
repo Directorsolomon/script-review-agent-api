@@ -10,7 +10,12 @@ import backend from "~backend/client";
 // ----------------------------- Utilities -----------------------------
 async function uploadToPresignedURL(url: string, file: File) {
   const res = await fetch(url, { method: "PUT", headers: { "Content-Type": file.type }, body: file });
-  if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+  if (!res.ok) {
+    if (res.status === 413) {
+      throw new Error("File too large for upload. Please reduce file size and try again.");
+    }
+    throw new Error(`Upload failed: ${res.status}`);
+  }
 }
 
 function cx(...classes: (string | false | undefined | null)[]) {
@@ -408,8 +413,11 @@ function DocsTab() {
     if (!formData.file) {
       newErrors.file = "Please choose a file";
     } else {
-      if (formData.file.size > 20 * 1024 * 1024) {
-        newErrors.file = "File too large (20 MB max)";
+      // Check file size (20MB for docs)
+      const maxSize = 20 * 1024 * 1024; // 20MB
+      if (formData.file.size > maxSize) {
+        const fileSizeMB = Math.round(formData.file.size / 1024 / 1024 * 10) / 10;
+        newErrors.file = `File too large: ${fileSizeMB}MB (maximum 20MB)`;
       }
       
       const allowedTypes = [
@@ -472,7 +480,23 @@ function DocsTab() {
       
     } catch (e: any) {
       console.error("Upload error:", e);
-      setErrors({ submit: e.message || "Failed to upload document" });
+      
+      // Handle specific error types
+      let errorMessage = "Failed to upload document";
+      
+      if (e.message?.includes("File too large") || e.message?.includes("maximum")) {
+        errorMessage = e.message;
+      } else if (e.message?.includes("Unsupported file type")) {
+        errorMessage = e.message;
+      } else if (e.message?.includes("413") || e.message?.includes("Payload Too Large")) {
+        errorMessage = "File too large for upload. Please reduce file size to under 20MB and try again.";
+      } else if (e.message?.includes("invalid_argument")) {
+        errorMessage = e.message.replace("invalid_argument: ", "");
+      } else if (e.message) {
+        errorMessage = e.message;
+      }
+      
+      setErrors({ submit: errorMessage });
     } finally {
       setBusy(false);
     }
@@ -590,6 +614,11 @@ function DocsTab() {
             <p className="text-sm text-gray-500 mt-1">
               Supported formats: PDF, DOCX, DOC, Markdown, TXT • Maximum size: 20 MB
             </p>
+            {formData.file && (
+              <div className="text-sm text-gray-600 mt-1">
+                Selected: {formData.file.name} ({Math.round(formData.file.size / 1024 / 1024 * 10) / 10} MB)
+              </div>
+            )}
           </FormField>
 
           {errors.submit && (

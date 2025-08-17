@@ -1,4 +1,4 @@
-import { api } from "encore.dev/api";
+import { api, APIError } from "encore.dev/api";
 import { Bucket } from "encore.dev/storage/objects";
 
 // Define buckets at module level
@@ -31,13 +31,18 @@ const ALLOWED_TYPES = [
 ];
 
 const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
+const MAX_SCRIPT_SIZE = 15 * 1024 * 1024; // 15MB for scripts (stricter limit)
 
-function validateFile(filename: string, contentType: string, size: number): { valid: boolean; error?: string } {
+function validateFile(filename: string, contentType: string, size: number, isScript: boolean = false): { valid: boolean; error?: string } {
+  const maxSize = isScript ? MAX_SCRIPT_SIZE : MAX_FILE_SIZE;
+  
   // Check file size
-  if (size > MAX_FILE_SIZE) {
+  if (size > maxSize) {
+    const maxSizeMB = Math.round(maxSize / 1024 / 1024);
+    const fileSizeMB = Math.round(size / 1024 / 1024 * 10) / 10;
     return {
       valid: false,
-      error: `File too large: ${Math.round(size / 1024 / 1024)}MB (max 20MB)`,
+      error: `File too large: ${fileSizeMB}MB (maximum ${maxSizeMB}MB allowed)`,
     };
   }
 
@@ -45,7 +50,7 @@ function validateFile(filename: string, contentType: string, size: number): { va
   if (!ALLOWED_TYPES.includes(contentType)) {
     return {
       valid: false,
-      error: `Unsupported file type: ${contentType}`,
+      error: `Unsupported file type: ${contentType}. Please use PDF, DOCX, DOC, TXT, or FDX files.`,
     };
   }
 
@@ -85,19 +90,25 @@ export const presignScript = api<PresignScriptRequest, PresignResponse>(
   { expose: true, method: "POST", path: "/storage/presign/script" },
   async (req) => {
     // Validate file before creating presigned URL
-    const validation = validateFile(req.filename, req.contentType, req.size);
+    const validation = validateFile(req.filename, req.contentType, req.size, true);
 
     if (!validation.valid) {
-      throw new Error(validation.error || "File validation failed");
+      throw APIError.invalidArgument(validation.error || "File validation failed");
     }
 
     const s3Key = genS3Key("scripts", req.filename);
-    const { url } = await scriptsBucket.signedUploadUrl(s3Key, { ttl: 300 });
     
-    return {
-      uploadUrl: url,
-      s3Key,
-    };
+    try {
+      const { url } = await scriptsBucket.signedUploadUrl(s3Key, { ttl: 300 });
+      
+      return {
+        uploadUrl: url,
+        s3Key,
+      };
+    } catch (error) {
+      console.error("Failed to generate presigned URL:", error);
+      throw APIError.internal("Failed to prepare file upload. Please try again.");
+    }
   }
 );
 
@@ -106,18 +117,24 @@ export const presignDoc = api<PresignDocRequest, PresignResponse>(
   { expose: true, method: "POST", path: "/storage/presign/doc" },
   async (req) => {
     // Validate file before creating presigned URL
-    const validation = validateFile(req.filename, req.contentType, req.size);
+    const validation = validateFile(req.filename, req.contentType, req.size, false);
 
     if (!validation.valid) {
-      throw new Error(validation.error || "File validation failed");
+      throw APIError.invalidArgument(validation.error || "File validation failed");
     }
 
     const s3Key = genS3Key("docs", req.filename);
-    const { url } = await docsBucket.signedUploadUrl(s3Key, { ttl: 300 });
     
-    return {
-      uploadUrl: url,
-      s3Key,
-    };
+    try {
+      const { url } = await docsBucket.signedUploadUrl(s3Key, { ttl: 300 });
+      
+      return {
+        uploadUrl: url,
+        s3Key,
+      };
+    } catch (error) {
+      console.error("Failed to generate presigned URL:", error);
+      throw APIError.internal("Failed to prepare file upload. Please try again.");
+    }
   }
 );
