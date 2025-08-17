@@ -1,4 +1,4 @@
-import { api, Cookie } from "encore.dev/api";
+import { api, Cookie, APIError } from "encore.dev/api";
 import { db } from "../database/db";
 import { verifyPassword, signJWT } from "./auth";
 import { secret } from "encore.dev/config";
@@ -24,14 +24,23 @@ export interface LoginResponse {
 export const login = api<LoginRequest, LoginResponse>(
   { expose: true, method: "POST", path: "/auth/login" },
   async (req) => {
+    if (!req.email || !req.password) {
+      throw APIError.invalidArgument("Email and password are required");
+    }
+
     const user = await db.queryRow`
       SELECT id, email, name, role, password_hash 
       FROM users 
-      WHERE email = ${req.email}
+      WHERE email = ${req.email.toLowerCase().trim()}
     `;
 
-    if (!user || !await verifyPassword(req.password, user.password_hash)) {
-      throw new Error("Invalid email or password");
+    if (!user) {
+      throw APIError.unauthenticated("Invalid email or password");
+    }
+
+    const isValidPassword = await verifyPassword(req.password, user.password_hash);
+    if (!isValidPassword) {
+      throw APIError.unauthenticated("Invalid email or password");
     }
 
     // Generate JWT token

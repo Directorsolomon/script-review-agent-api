@@ -58,6 +58,10 @@ export const gw = new Gateway({ authHandler: auth });
 function verifyJWT(token: string, secret: string): { sub: string; exp: number } {
   try {
     const [header, payload, signature] = token.split('.');
+    if (!header || !payload || !signature) {
+      throw new Error('Invalid token format');
+    }
+    
     const decodedPayload = JSON.parse(Buffer.from(payload, 'base64url').toString());
     
     // In production, verify signature properly
@@ -85,5 +89,10 @@ export async function hashPassword(password: string): Promise<string> {
 }
 
 export async function verifyPassword(password: string, hash: string): Promise<boolean> {
-  return bcrypt.compare(password, hash);
+  try {
+    return await bcrypt.compare(password, hash);
+  } catch (error) {
+    console.error('Password verification error:', error);
+    return false;
+  }
 }

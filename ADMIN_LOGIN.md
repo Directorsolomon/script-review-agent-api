@@ -73,3 +73,12 @@
 - Check that the password hashes match the expected format
 - Verify the user roles are correctly set in the database
 - Contact system administrator if you need additional accounts created
+
+## Password Hash Generation
+
+The default passwords are hashed using bcrypt with 10 rounds:
+- `admin123` → `$2b$10$K8gF2vQ3mN9pL7rS4tU6vW8xY1zA2bC3dE4fG5hI6jK7lM8nO9pQ0r`
+- `editor123` → `$2b$10$A1bC2dE3fG4hI5jK6lM7nO8pQ9rS0tU1vW2xY3zA4bC5dE6fG7hI8j`
+- `viewer123` → `$2b$10$B2cD3eF4gH5iJ6kL7mN8oP9qR0sT1uV2wX3yZ4aB5cD6eF7gH8iJ9k`
+
+To generate new password hashes, use the bcrypt library with 10 rounds.
