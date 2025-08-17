@@ -74,7 +74,7 @@ export const processScript = api<ProcessScriptRequest, ProcessScriptResponse>(
           if (vectorAvailable) {
             await db.exec`
               INSERT INTO script_chunks (submission_id, scene_index, page_start, page_end, text, embedding)
-              VALUES (${req.submissionId}, ${null}, ${null}, ${null}, ${chunk.text}, ${JSON.stringify(embedding)})
+              VALUES (${req.submissionId}, ${null}, ${null}, ${null}, ${chunk.text}, ${JSON.stringify(embedding)}::vector)
             `;
           } else {
             // Store embedding as JSON string when vector type is not available

@@ -1,4 +1,4 @@
-import { api } from "encore.dev/api";
+import { api, APIError } from "encore.dev/api";
 import { db } from "../database/db";
 import { embeddings } from "~encore/clients";
 import { getAuthData } from "~encore/auth";
@@ -19,7 +19,7 @@ export const completeDoc = api<CompleteDocRequest, CompleteDocResponse>(
     
     // Check admin permissions
     if (!['admin', 'editor'].includes(auth.role)) {
-      throw new Error("Insufficient permissions");
+      throw APIError.permissionDenied("Insufficient permissions");
     }
 
     const doc = await db.queryRow`
@@ -27,7 +27,7 @@ export const completeDoc = api<CompleteDocRequest, CompleteDocResponse>(
     `;
 
     if (!doc) {
-      throw new Error("Document not found");
+      throw APIError.notFound("Document not found");
     }
 
     await embeddings.processDocument({ docId: req.docId });

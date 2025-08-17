@@ -15,7 +15,7 @@ export const getDoc = api<GetDocRequest, DocRecord>(
     
     // Check admin permissions
     if (!['admin', 'editor', 'viewer'].includes(auth.role)) {
-      throw new Error("Insufficient permissions");
+      throw APIError.permissionDenied("Insufficient permissions");
     }
 
     const doc = await db.queryRow<DocRecord>`

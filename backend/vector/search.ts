@@ -96,11 +96,11 @@ export const searchDocs = api<SearchDocsRequest, SearchDocsResponse>(
     // Use raw SQL for complex vector operations
     const query = `
       SELECT c.id, c.doc_id, c.section, c.line_start, c.line_end, c.text,
-             1 - (c.embedding <=> $1::vector) AS score
+             1 - (c.embedding::vector <=> $1::vector) AS score
       FROM admin_doc_chunks c
       JOIN docs d ON d.id = c.doc_id
       ${whereClause}
-      ORDER BY c.embedding <=> $1::vector
+      ORDER BY c.embedding::vector <=> $1::vector
       LIMIT $${params.length + 1}
     `;
     
@@ -143,10 +143,10 @@ export const searchScript = api<SearchScriptRequest, SearchScriptResponse>(
 
     const results = await db.rawQueryAll(`
       SELECT id, submission_id, scene_index, page_start, page_end, text,
-             1 - (embedding <=> $1::vector) AS score
+             1 - (embedding::vector <=> $1::vector) AS score
       FROM script_chunks 
       WHERE submission_id = $2
-      ORDER BY embedding <=> $1::vector
+      ORDER BY embedding::vector <=> $1::vector
       LIMIT $3
     `, [JSON.stringify(queryEmbedding), req.submissionId, k]);
 

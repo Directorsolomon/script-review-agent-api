@@ -1,4 +1,4 @@
-import { api, Query } from "encore.dev/api";
+import { api, Query, APIError } from "encore.dev/api";
 import { db } from "../database/db";
 import { getAuthData } from "~encore/auth";
 import type { SubmissionRecord } from "../types/types";
@@ -27,7 +27,7 @@ export const listAdminSubmissions = api<ListAdminSubmissionsRequest, ListAdminSu
     
     // Check admin permissions
     if (!['admin', 'editor', 'viewer'].includes(auth.role)) {
-      throw new Error("Insufficient permissions");
+      throw APIError.permissionDenied("Insufficient permissions");
     }
 
     const limit = req.limit || 50;

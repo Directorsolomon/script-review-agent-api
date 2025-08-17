@@ -1,4 +1,4 @@
-import { api } from "encore.dev/api";
+import { api, APIError } from "encore.dev/api";
 import { storage } from "~encore/clients";
 import { db } from "../database/db";
 import { getAuthData } from "~encore/auth";
@@ -30,7 +30,7 @@ export const presignDoc = api<PresignDocRequest, PresignDocResponse>(
     
     // Check admin permissions
     if (!['admin', 'editor'].includes(auth.role)) {
-      throw new Error("Insufficient permissions");
+      throw APIError.permissionDenied("Insufficient permissions");
     }
 
     const { uploadUrl, s3Key } = await storage.presignDoc({

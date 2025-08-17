@@ -26,7 +26,7 @@ export const updateDoc = api<UpdateDocRequest, UpdateDocResponse>(
     
     // Check admin permissions
     if (!['admin', 'editor'].includes(auth.role)) {
-      throw new Error("Insufficient permissions");
+      throw APIError.permissionDenied("Insufficient permissions");
     }
 
     // Check if document exists

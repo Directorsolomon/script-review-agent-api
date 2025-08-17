@@ -1,4 +1,4 @@
-import { api } from "encore.dev/api";
+import { api, APIError } from "encore.dev/api";
 import { db } from "../database/db";
 import { getAuthData } from "~encore/auth";
 import type { DocRecord } from "../types/types";
@@ -15,7 +15,7 @@ export const listDocs = api<void, ListDocsResponse>(
     
     // Check admin permissions
     if (!['admin', 'editor', 'viewer'].includes(auth.role)) {
-      throw new Error("Insufficient permissions");
+      throw APIError.permissionDenied("Insufficient permissions");
     }
 
     const docs = await db.queryAll<DocRecord>`

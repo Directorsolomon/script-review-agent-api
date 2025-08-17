@@ -11,7 +11,7 @@ export interface DocRecord {
   platform?: Platform;
   tags: string[];
   status: 'active' | 'inactive' | 'experimental';
-  s3Key: string;
+  s3_key: string;
   created_at: string;
   updated_at: string;
 }
@@ -26,7 +26,7 @@ export interface SubmissionRecord {
   genre?: string;
   region?: Region;
   platform?: Platform;
-  file_s3Key?: string;
+  file_s3_key?: string;
   status: 'queued' | 'processing' | 'completed' | 'failed';
   created_at: string;
 }

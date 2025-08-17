@@ -67,7 +67,7 @@ export const processDocument = api<ProcessDocumentRequest, ProcessDocumentRespon
         if (vectorAvailable) {
           await db.exec`
             INSERT INTO admin_doc_chunks (doc_id, section, line_start, line_end, text, priority_weight, embedding)
-            VALUES (${req.docId}, ${chunk.section || null}, ${chunk.lineStart || null}, ${chunk.lineEnd || null}, ${chunk.text}, ${1.0}, ${JSON.stringify(embedding)})
+            VALUES (${req.docId}, ${chunk.section || null}, ${chunk.lineStart || null}, ${chunk.lineEnd || null}, ${chunk.text}, ${1.0}, ${JSON.stringify(embedding)}::vector)
           `;
         } else {
           // Store embedding as JSON string when vector type is not available
