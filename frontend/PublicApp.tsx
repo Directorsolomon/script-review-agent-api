@@ -253,10 +253,12 @@ function SubmissionForm() {
         file_s3_key: presign.s3Key,
       });
 
+      // Start the review process
       try {
         await backend.review.run({ submissionId: created.submissionId });
       } catch (err) {
         console.error("Failed to start review:", err);
+        // Don't fail the submission if review start fails - user can retry later
       }
 
       setSuccess({ submissionId: created.submissionId });
@@ -491,6 +493,7 @@ function StatusLookup() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<any | null>(null);
+  const [retrying, setRetrying] = useState(false);
   const backend = useBackend();
 
   function validateSubmissionId(id: string): boolean {
@@ -529,6 +532,25 @@ function StatusLookup() {
     }
   }
 
+  async function retryReview() {
+    if (!submissionId.trim()) return;
+    
+    setRetrying(true);
+    try {
+      await backend.review.run({ submissionId: submissionId.trim() });
+      setError(null);
+      // Wait a moment then try to fetch the report again
+      setTimeout(() => {
+        fetchReport(new Event('submit') as any);
+      }, 2000);
+    } catch (e: any) {
+      console.error("Failed to retry review:", e);
+      setError("Failed to restart review: " + e.message);
+    } finally {
+      setRetrying(false);
+    }
+  }
+
   const reportData = useMemo(() => report?.report_json || null, [report]);
 
   return (
@@ -557,7 +579,22 @@ function StatusLookup() {
               </Button>
             </div>
             
-            {error && <ValidationMessage type="error" message={error} />}
+            {error && (
+              <div className="space-y-3">
+                <ValidationMessage type="error" message={error} />
+                {error.includes("not ready yet") && (
+                  <div className="text-center">
+                    <Button 
+                      variant="outline" 
+                      onClick={retryReview}
+                      disabled={retrying || !submissionId.trim()}
+                    >
+                      {retrying ? <LoadingSpinner size="sm" /> : "Retry Review"}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
           </form>
 
           {reportData && (

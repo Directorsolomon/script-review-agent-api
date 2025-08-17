@@ -44,12 +44,20 @@ export const processScript = api<ProcessScriptRequest, ProcessScriptResponse>(
         s3Key: req.s3Key,
       });
 
+      if (!extractedText || extractedText.trim().length === 0) {
+        throw new Error("No text could be extracted from script");
+      }
+
       // Chunk the text into manageable pieces
       const { chunks } = await text.chunkText({
         text: extractedText,
         maxTokens: 800,
         overlap: 120,
       });
+
+      if (chunks.length === 0) {
+        throw new Error("No chunks generated from script text");
+      }
 
       // Generate embeddings for chunks - process in batches to avoid memory issues
       const { embeddings: chunkEmbeddings } = await embeddings.generateEmbeddings({
@@ -72,10 +80,19 @@ export const processScript = api<ProcessScriptRequest, ProcessScriptResponse>(
           const embedding = batchEmbeddings[j];
           
           if (vectorAvailable) {
-            await db.exec`
-              INSERT INTO script_chunks (submission_id, scene_index, page_start, page_end, text, embedding)
-              VALUES (${req.submissionId}, ${null}, ${null}, ${null}, ${chunk.text}, ${JSON.stringify(embedding)}::vector)
-            `;
+            try {
+              await db.exec`
+                INSERT INTO script_chunks (submission_id, scene_index, page_start, page_end, text, embedding)
+                VALUES (${req.submissionId}, ${null}, ${null}, ${null}, ${chunk.text}, ${JSON.stringify(embedding)}::vector)
+              `;
+            } catch (vectorError) {
+              console.warn("Vector insert failed, falling back to JSON:", vectorError);
+              // Fallback to JSON string storage
+              await db.exec`
+                INSERT INTO script_chunks (submission_id, scene_index, page_start, page_end, text, embedding)
+                VALUES (${req.submissionId}, ${null}, ${null}, ${null}, ${chunk.text}, ${JSON.stringify(embedding)})
+              `;
+            }
           } else {
             // Store embedding as JSON string when vector type is not available
             await db.exec`
@@ -85,6 +102,8 @@ export const processScript = api<ProcessScriptRequest, ProcessScriptResponse>(
           }
         }
       }
+
+      console.log(`Successfully processed script for submission ${req.submissionId} with ${chunks.length} chunks`);
 
     } catch (error) {
       console.error(`Failed to process script for submission ${req.submissionId}:`, error);

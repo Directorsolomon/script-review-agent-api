@@ -23,7 +23,7 @@ export const run = api<RunReviewRequest, RunReviewResponse>(
     }
 
     const submission = await db.queryRow`
-      SELECT id, file_s3_key, writer_email FROM submissions WHERE id = ${req.submissionId}
+      SELECT id, file_s3_key, writer_email, status FROM submissions WHERE id = ${req.submissionId}
     `;
 
     if (!submission) {
@@ -39,8 +39,26 @@ export const run = api<RunReviewRequest, RunReviewResponse>(
       throw APIError.invalidArgument("No script file found for submission");
     }
 
-    // Call orchestrator with only the submission ID - no large payloads
-    await orchestrator.processReview({ submissionId: req.submissionId });
+    // Don't restart if already processing or completed
+    if (submission.status === 'processing') {
+      throw APIError.invalidArgument("Review is already in progress");
+    }
+
+    try {
+      // Call orchestrator with only the submission ID - no large payloads
+      await orchestrator.processReview({ submissionId: req.submissionId });
+    } catch (error) {
+      console.error("Failed to start review process:", error);
+      
+      // Update submission status to failed
+      await db.exec`
+        UPDATE submissions 
+        SET status = 'failed' 
+        WHERE id = ${req.submissionId}
+      `;
+      
+      throw APIError.internal("Failed to start review process");
+    }
 
     return { ok: true };
   }

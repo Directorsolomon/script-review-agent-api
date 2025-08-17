@@ -76,64 +76,84 @@ export const processReview = api<ProcessReviewRequest, ProcessReviewResponse>(
       
       const agentResults = await Promise.all(
         agentNames.map(async (agentName) => {
-          // Get agent-specific context - this fetches relevant chunks, not full content
-          const contextResponse = await retrieval.getContext({
-            submissionId: req.submissionId,
-            agentName,
-          });
+          try {
+            // Get agent-specific context - this fetches relevant chunks, not full content
+            const contextResponse = await retrieval.getContext({
+              submissionId: req.submissionId,
+              agentName,
+            });
 
-          // Call the appropriate agent with only relevant excerpts
-          switch (agentName) {
-            case 'structure':
-              return agents.analyzeStructure({
-                submissionMetadata,
-                scriptExcerpts: contextResponse.scriptSnippets,
-                docChunks: contextResponse.docChunks,
-              });
-            case 'character':
-              return agents.analyzeCharacter({
-                submissionMetadata,
-                scriptExcerpts: contextResponse.scriptSnippets,
-                docChunks: contextResponse.docChunks,
-              });
-            case 'dialogue':
-              return agents.analyzeDialogue({
-                submissionMetadata,
-                scriptExcerpts: contextResponse.scriptSnippets,
-                docChunks: contextResponse.docChunks,
-              });
-            case 'pacing':
-              return agents.analyzePacing({
-                submissionMetadata,
-                scriptExcerpts: contextResponse.scriptSnippets,
-                docChunks: contextResponse.docChunks,
-              });
-            case 'market':
-              return agents.analyzeMarket({
-                submissionMetadata,
-                scriptExcerpts: contextResponse.scriptSnippets,
-                docChunks: contextResponse.docChunks,
-              });
-            case 'cultural':
-              return agents.analyzeCultural({
-                submissionMetadata,
-                scriptExcerpts: contextResponse.scriptSnippets,
-                docChunks: contextResponse.docChunks,
-              });
-            case 'platform':
-              return agents.analyzePlatform({
-                submissionMetadata,
-                scriptExcerpts: contextResponse.scriptSnippets,
-                docChunks: contextResponse.docChunks,
-              });
-            case 'ethics':
-              return agents.analyzeEthics({
-                submissionMetadata,
-                scriptExcerpts: contextResponse.scriptSnippets,
-                docChunks: contextResponse.docChunks,
-              });
-            default:
-              throw new Error(`Unknown agent: ${agentName}`);
+            // Call the appropriate agent with only relevant excerpts
+            switch (agentName) {
+              case 'structure':
+                return agents.analyzeStructure({
+                  submissionMetadata,
+                  scriptExcerpts: contextResponse.scriptSnippets,
+                  docChunks: contextResponse.docChunks,
+                });
+              case 'character':
+                return agents.analyzeCharacter({
+                  submissionMetadata,
+                  scriptExcerpts: contextResponse.scriptSnippets,
+                  docChunks: contextResponse.docChunks,
+                });
+              case 'dialogue':
+                return agents.analyzeDialogue({
+                  submissionMetadata,
+                  scriptExcerpts: contextResponse.scriptSnippets,
+                  docChunks: contextResponse.docChunks,
+                });
+              case 'pacing':
+                return agents.analyzePacing({
+                  submissionMetadata,
+                  scriptExcerpts: contextResponse.scriptSnippets,
+                  docChunks: contextResponse.docChunks,
+                });
+              case 'market':
+                return agents.analyzeMarket({
+                  submissionMetadata,
+                  scriptExcerpts: contextResponse.scriptSnippets,
+                  docChunks: contextResponse.docChunks,
+                });
+              case 'cultural':
+                return agents.analyzeCultural({
+                  submissionMetadata,
+                  scriptExcerpts: contextResponse.scriptSnippets,
+                  docChunks: contextResponse.docChunks,
+                });
+              case 'platform':
+                return agents.analyzePlatform({
+                  submissionMetadata,
+                  scriptExcerpts: contextResponse.scriptSnippets,
+                  docChunks: contextResponse.docChunks,
+                });
+              case 'ethics':
+                return agents.analyzeEthics({
+                  submissionMetadata,
+                  scriptExcerpts: contextResponse.scriptSnippets,
+                  docChunks: contextResponse.docChunks,
+                });
+              default:
+                throw new Error(`Unknown agent: ${agentName}`);
+            }
+          } catch (error) {
+            console.error(`Agent ${agentName} failed:`, error);
+            // Return a fallback analysis to prevent the entire process from failing
+            return {
+              analysis: {
+                name: agentName,
+                score: 5.0,
+                findings: [{
+                  id: `${agentName}-error`,
+                  summary: `Analysis temporarily unavailable for ${agentName}`,
+                  severity: 'info' as const,
+                  evidence: []
+                }],
+                recommendations: [`Please retry analysis for ${agentName} component`],
+                citations: [],
+                confidence: 0.1,
+              }
+            };
           }
         })
       );

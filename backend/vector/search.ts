@@ -58,68 +58,74 @@ export const searchDocs = api<SearchDocsRequest, SearchDocsResponse>(
     
     if (!vectorAvailable) {
       // Fallback to text-based search when vector is not available
-      return { results: [] };
+      console.log("Vector search not available, falling back to text search");
+      return await fallbackTextSearchDocs(req);
     }
     
-    // Generate embedding for query
-    const { embeddings: queryEmbeddings } = await embeddings.generateEmbeddings({
-      texts: [req.query],
-    });
-    const queryEmbedding = queryEmbeddings[0];
+    try {
+      // Generate embedding for query
+      const { embeddings: queryEmbeddings } = await embeddings.generateEmbeddings({
+        texts: [req.query],
+      });
+      const queryEmbedding = queryEmbeddings[0];
 
-    // Build WHERE conditions
-    const conditions: string[] = [];
-    const params: any[] = [JSON.stringify(queryEmbedding)];
-    
-    if (req.filters.doc_type) {
-      params.push(req.filters.doc_type);
-      conditions.push(`d.doc_type = $${params.length}`);
-    }
-    
-    if (req.filters.region) {
-      params.push(req.filters.region);
-      conditions.push(`COALESCE(d.region, '') = $${params.length}`);
-    }
-    
-    if (req.filters.platform) {
-      params.push(req.filters.platform);
-      conditions.push(`COALESCE(d.platform, '') = $${params.length}`);
-    }
-    
-    if (req.filters.doc_id) {
-      params.push(req.filters.doc_id);
-      conditions.push(`c.doc_id = $${params.length}`);
-    }
+      // Build WHERE conditions
+      const conditions: string[] = [];
+      const params: any[] = [JSON.stringify(queryEmbedding)];
+      
+      if (req.filters.doc_type) {
+        params.push(req.filters.doc_type);
+        conditions.push(`d.doc_type = $${params.length}`);
+      }
+      
+      if (req.filters.region) {
+        params.push(req.filters.region);
+        conditions.push(`(d.region = $${params.length} OR d.region IS NULL)`);
+      }
+      
+      if (req.filters.platform) {
+        params.push(req.filters.platform);
+        conditions.push(`(d.platform = $${params.length} OR d.platform IS NULL)`);
+      }
+      
+      if (req.filters.doc_id) {
+        params.push(req.filters.doc_id);
+        conditions.push(`c.doc_id = $${params.length}`);
+      }
 
-    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
-    // Use raw SQL for complex vector operations
-    const query = `
-      SELECT c.id, c.doc_id, c.section, c.line_start, c.line_end, c.text,
-             1 - (c.embedding::vector <=> $1::vector) AS score
-      FROM admin_doc_chunks c
-      JOIN docs d ON d.id = c.doc_id
-      ${whereClause}
-      ORDER BY c.embedding::vector <=> $1::vector
-      LIMIT $${params.length + 1}
-    `;
-    
-    params.push(k);
-    const results = await db.rawQueryAll(query, params);
+      // Use raw SQL for complex vector operations
+      const query = `
+        SELECT c.id, c.doc_id, c.section, c.line_start, c.line_end, c.text,
+               1 - (c.embedding::vector <=> $1::vector) AS score
+        FROM admin_doc_chunks c
+        JOIN docs d ON d.id = c.doc_id
+        ${whereClause}
+        ORDER BY c.embedding::vector <=> $1::vector
+        LIMIT $${params.length + 1}
+      `;
+      
+      params.push(k);
+      const results = await db.rawQueryAll(query, params);
 
-    return {
-      results: results.map(r => ({
-        id: r.id,
-        text: r.text,
-        score: r.score,
-        metadata: {
-          doc_id: r.doc_id,
-          section: r.section,
-          line_start: r.line_start,
-          line_end: r.line_end,
-        },
-      })),
-    };
+      return {
+        results: results.map(r => ({
+          id: r.id,
+          text: r.text,
+          score: r.score,
+          metadata: {
+            doc_id: r.doc_id,
+            section: r.section,
+            line_start: r.line_start,
+            line_end: r.line_end,
+          },
+        })),
+      };
+    } catch (error) {
+      console.error("Vector search failed, falling back to text search:", error);
+      return await fallbackTextSearchDocs(req);
+    }
   }
 );
 
@@ -132,36 +138,123 @@ export const searchScript = api<SearchScriptRequest, SearchScriptResponse>(
     
     if (!vectorAvailable) {
       // Fallback to text-based search when vector is not available
-      return { results: [] };
+      console.log("Vector search not available, falling back to text search");
+      return await fallbackTextSearchScript(req);
     }
     
-    // Generate embedding for query
-    const { embeddings: queryEmbeddings } = await embeddings.generateEmbeddings({
-      texts: [req.query],
-    });
-    const queryEmbedding = queryEmbeddings[0];
+    try {
+      // Generate embedding for query
+      const { embeddings: queryEmbeddings } = await embeddings.generateEmbeddings({
+        texts: [req.query],
+      });
+      const queryEmbedding = queryEmbeddings[0];
 
-    const results = await db.rawQueryAll(`
-      SELECT id, submission_id, scene_index, page_start, page_end, text,
-             1 - (embedding::vector <=> $1::vector) AS score
-      FROM script_chunks 
-      WHERE submission_id = $2
-      ORDER BY embedding::vector <=> $1::vector
-      LIMIT $3
-    `, [JSON.stringify(queryEmbedding), req.submissionId, k]);
+      const results = await db.rawQueryAll(`
+        SELECT id, submission_id, scene_index, page_start, page_end, text,
+               1 - (embedding::vector <=> $1::vector) AS score
+        FROM script_chunks 
+        WHERE submission_id = $2
+        ORDER BY embedding::vector <=> $1::vector
+        LIMIT $3
+      `, [JSON.stringify(queryEmbedding), req.submissionId, k]);
 
-    return {
-      results: results.map(r => ({
-        id: r.id,
-        text: r.text,
-        score: r.score,
-        metadata: {
-          submission_id: r.submission_id,
-          scene_index: r.scene_index,
-          page_start: r.page_start,
-          page_end: r.page_end,
-        },
-      })),
-    };
+      return {
+        results: results.map(r => ({
+          id: r.id,
+          text: r.text,
+          score: r.score,
+          metadata: {
+            submission_id: r.submission_id,
+            scene_index: r.scene_index,
+            page_start: r.page_start,
+            page_end: r.page_end,
+          },
+        })),
+      };
+    } catch (error) {
+      console.error("Vector search failed, falling back to text search:", error);
+      return await fallbackTextSearchScript(req);
+    }
   }
 );
+
+// Fallback text search for documents
+async function fallbackTextSearchDocs(req: SearchDocsRequest): Promise<SearchDocsResponse> {
+  const k = req.k || 12;
+  
+  // Build WHERE conditions for text search
+  const conditions: string[] = [];
+  const params: any[] = [req.query];
+  
+  if (req.filters.doc_type) {
+    params.push(req.filters.doc_type);
+    conditions.push(`d.doc_type = $${params.length}`);
+  }
+  
+  if (req.filters.region) {
+    params.push(req.filters.region);
+    conditions.push(`(d.region = $${params.length} OR d.region IS NULL)`);
+  }
+  
+  if (req.filters.platform) {
+    params.push(req.filters.platform);
+    conditions.push(`(d.platform = $${params.length} OR d.platform IS NULL)`);
+  }
+
+  const whereClause = conditions.length > 0 ? `AND ${conditions.join(' AND ')}` : '';
+
+  const query = `
+    SELECT c.id, c.doc_id, c.section, c.line_start, c.line_end, c.text,
+           ts_rank_cd(c.tsv, plainto_tsquery($1)) AS score
+    FROM admin_doc_chunks c 
+    JOIN docs d ON d.id = c.doc_id
+    WHERE c.tsv @@ plainto_tsquery($1) ${whereClause}
+    ORDER BY score DESC
+    LIMIT $${params.length + 1}
+  `;
+  
+  params.push(k);
+  const results = await db.rawQueryAll(query, params);
+
+  return {
+    results: results.map(r => ({
+      id: r.id,
+      text: r.text,
+      score: r.score,
+      metadata: {
+        doc_id: r.doc_id,
+        section: r.section,
+        line_start: r.line_start,
+        line_end: r.line_end,
+      },
+    })),
+  };
+}
+
+// Fallback text search for scripts
+async function fallbackTextSearchScript(req: SearchScriptRequest): Promise<SearchScriptResponse> {
+  const k = req.k || 8;
+
+  const results = await db.rawQueryAll(`
+    SELECT id, submission_id, scene_index, page_start, page_end, text,
+           ts_rank_cd(tsv, plainto_tsquery($1)) AS score
+    FROM script_chunks 
+    WHERE submission_id = $2 AND tsv @@ plainto_tsquery($1)
+    ORDER BY score DESC
+    LIMIT $3
+  `, [req.query, req.submissionId, k]);
+
+  return {
+    results: results.map(r => ({
+      id: r.id,
+      text: r.text,
+      score: r.score,
+      metadata: {
+        submission_id: r.submission_id,
+        scene_index: r.scene_index,
+        page_start: r.page_start,
+        page_end: r.page_end,
+      },
+    })),
+  };
+}
