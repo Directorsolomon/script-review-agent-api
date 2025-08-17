@@ -17,12 +17,27 @@ export interface ExtractTextResponse {
 export const extractText = api<ExtractTextRequest, ExtractTextResponse>(
   { expose: false, method: "POST", path: "/text/extract" },
   async (req) => {
+    // Validate input - ensure we only accept S3 keys, not file content
+    if (!req.s3Key || typeof req.s3Key !== 'string') {
+      throw new Error("Invalid S3 key");
+    }
+
     // Try docs bucket first, then scripts bucket
     let buffer: Buffer;
     try {
       buffer = await docsBucket.download(req.s3Key);
     } catch {
-      buffer = await scriptsBucket.download(req.s3Key);
+      try {
+        buffer = await scriptsBucket.download(req.s3Key);
+      } catch (error) {
+        throw new Error(`Failed to download file from S3: ${error}`);
+      }
+    }
+    
+    // Limit file size to prevent memory issues (50MB max)
+    const maxSize = 50 * 1024 * 1024; // 50MB
+    if (buffer.length > maxSize) {
+      throw new Error(`File too large: ${buffer.length} bytes (max ${maxSize})`);
     }
     
     if (isPDF(buffer, req.contentType)) {

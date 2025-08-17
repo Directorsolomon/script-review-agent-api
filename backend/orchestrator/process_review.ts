@@ -27,12 +27,23 @@ const DEFAULT_RUBRIC_WEIGHTS = {
 export const processReview = api<ProcessReviewRequest, ProcessReviewResponse>(
   { expose: false, method: "POST", path: "/orchestrator/process" },
   async (req) => {
+    // Validate input - only accept submission ID, no large payloads
+    if (!req.submissionId || typeof req.submissionId !== 'string') {
+      throw new Error("Invalid submission ID");
+    }
+
     const submission = await db.queryRow`
-      SELECT id, writer_name, script_title, platform, format, draft_version, genre, region, file_s3_key FROM submissions WHERE id = ${req.submissionId}
+      SELECT id, writer_name, script_title, platform, format, draft_version, genre, region, file_s3_key 
+      FROM submissions 
+      WHERE id = ${req.submissionId}
     `;
 
     if (!submission) {
       throw new Error("Submission not found");
+    }
+
+    if (!submission.file_s3_key) {
+      throw new Error("No script file found for submission");
     }
 
     // Update submission status to processing
@@ -43,15 +54,13 @@ export const processReview = api<ProcessReviewRequest, ProcessReviewResponse>(
     `;
 
     try {
-      // Process script embeddings if we have a file
-      if (submission.file_s3_key) {
-        await embeddings.processScript({
-          submissionId: req.submissionId,
-          s3Key: submission.file_s3_key,
-        });
-      }
+      // Process script embeddings from S3 - this should be the only place large content is handled
+      await embeddings.processScript({
+        submissionId: req.submissionId,
+        s3Key: submission.file_s3_key,
+      });
 
-      // Prepare submission metadata for agents
+      // Prepare submission metadata for agents - only metadata, no large content
       const submissionMetadata = {
         title: submission.script_title,
         writer_name: submission.writer_name,
@@ -67,13 +76,13 @@ export const processReview = api<ProcessReviewRequest, ProcessReviewResponse>(
       
       const agentResults = await Promise.all(
         agentNames.map(async (agentName) => {
-          // Get agent-specific context
+          // Get agent-specific context - this fetches relevant chunks, not full content
           const contextResponse = await retrieval.getContext({
             submissionId: req.submissionId,
             agentName,
           });
 
-          // Call the appropriate agent
+          // Call the appropriate agent with only relevant excerpts
           switch (agentName) {
             case 'structure':
               return agents.analyzeStructure({
@@ -178,6 +187,8 @@ export const processReview = api<ProcessReviewRequest, ProcessReviewResponse>(
       `;
 
     } catch (error) {
+      console.error(`Failed to process review for submission ${req.submissionId}:`, error);
+      
       // Update submission status to failed
       await db.exec`
         UPDATE submissions 
