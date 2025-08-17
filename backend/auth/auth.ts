@@ -3,6 +3,7 @@ import { authHandler } from "encore.dev/auth";
 import { secret } from "encore.dev/config";
 import { db } from "../database/db";
 import * as bcrypt from "bcrypt";
+import * as crypto from "crypto";
 
 const jwtSecret = secret("JWTSecret");
 
@@ -62,26 +63,47 @@ function verifyJWT(token: string, secret: string): { sub: string; exp: number } 
       throw new Error('Invalid token format');
     }
     
+    // Decode payload
     const decodedPayload = JSON.parse(Buffer.from(payload, 'base64url').toString());
     
-    // In production, verify signature properly
-    if (decodedPayload.exp < Date.now() / 1000) {
+    // Check expiration
+    if (decodedPayload.exp && decodedPayload.exp < Date.now() / 1000) {
       throw new Error('Token expired');
     }
     
+    // In production, verify signature properly using HMAC
+    const expectedSignature = crypto
+      .createHmac('sha256', secret)
+      .update(`${header}.${payload}`)
+      .digest('base64url');
+    
+    if (signature !== expectedSignature) {
+      throw new Error('Invalid signature');
+    }
+    
     return decodedPayload;
-  } catch {
+  } catch (error) {
     throw new Error('Invalid token');
   }
 }
 
 export function signJWT(payload: any, secret: string): string {
-  // In production, use a proper JWT library
-  const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url');
-  const payloadStr = Buffer.from(JSON.stringify(payload)).toString('base64url');
-  const signature = 'signature'; // In production, generate proper signature
+  // Create header
+  const header = {
+    alg: 'HS256',
+    typ: 'JWT'
+  };
   
-  return `${header}.${payloadStr}.${signature}`;
+  const encodedHeader = Buffer.from(JSON.stringify(header)).toString('base64url');
+  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  
+  // Create signature
+  const signature = crypto
+    .createHmac('sha256', secret)
+    .update(`${encodedHeader}.${encodedPayload}`)
+    .digest('base64url');
+  
+  return `${encodedHeader}.${encodedPayload}.${signature}`;
 }
 
 export async function hashPassword(password: string): Promise<string> {

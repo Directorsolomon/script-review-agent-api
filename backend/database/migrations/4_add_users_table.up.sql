@@ -19,7 +19,9 @@ VALUES (
   '$2b$10$K8gF2vQ3mN9pL7rS4tU6vW8xY1zA2bC3dE4fG5hI6jK7lM8nO9pQ0r',
   'admin',
   NOW()
-) ON CONFLICT (id) DO NOTHING;
+) ON CONFLICT (email) DO UPDATE SET
+  password_hash = EXCLUDED.password_hash,
+  updated_at = NOW();
 
 -- Create default editor user (password: editor123)
 -- Email: editor@scriptreview.com
@@ -32,7 +34,9 @@ VALUES (
   '$2b$10$A1bC2dE3fG4hI5jK6lM7nO8pQ9rS0tU1vW2xY3zA4bC5dE6fG7hI8j',
   'editor',
   NOW()
-) ON CONFLICT (id) DO NOTHING;
+) ON CONFLICT (email) DO UPDATE SET
+  password_hash = EXCLUDED.password_hash,
+  updated_at = NOW();
 
 -- Create default viewer user (password: viewer123)
 -- Email: viewer@scriptreview.com
@@ -45,7 +49,9 @@ VALUES (
   '$2b$10$B2cD3eF4gH5iJ6kL7mN8oP9qR0sT1uV2wX3yZ4aB5cD6eF7gH8iJ9k',
   'viewer',
   NOW()
-) ON CONFLICT (id) DO NOTHING;
+) ON CONFLICT (email) DO UPDATE SET
+  password_hash = EXCLUDED.password_hash,
+  updated_at = NOW();
 
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_role ON users(role);
