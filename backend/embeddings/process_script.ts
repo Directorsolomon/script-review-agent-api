@@ -1,6 +1,7 @@
 import { api } from "encore.dev/api";
 import { db } from "../database/db";
 import { text, embeddings } from "~encore/clients";
+import { chunkText } from "../text/chunker";
 
 export interface ProcessScriptRequest {
   submissionId: string;
@@ -9,21 +10,10 @@ export interface ProcessScriptRequest {
 
 export interface ProcessScriptResponse {
   ok: boolean;
+  chunksProcessed: number;
 }
 
-// Check if vector type is available
-async function isVectorAvailable(): Promise<boolean> {
-  try {
-    const result = await db.queryRow`
-      SELECT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'vector') as available
-    `;
-    return result?.available || false;
-  } catch {
-    return false;
-  }
-}
-
-// Processes a script for embeddings and stores chunks
+// Processes a script for embeddings using safe chunking
 export const processScript = api<ProcessScriptRequest, ProcessScriptResponse>(
   { expose: false, method: "POST", path: "/embeddings/script" },
   async (req) => {
@@ -36,10 +26,8 @@ export const processScript = api<ProcessScriptRequest, ProcessScriptResponse>(
       throw new Error("Invalid S3 key");
     }
 
-    const vectorAvailable = await isVectorAvailable();
-
     try {
-      // Extract text from script stored in S3 - this is where large content is handled
+      // Extract text from script stored in S3
       const { text: extractedText } = await text.extractText({
         s3Key: req.s3Key,
       });
@@ -48,68 +36,84 @@ export const processScript = api<ProcessScriptRequest, ProcessScriptResponse>(
         throw new Error("No text could be extracted from script");
       }
 
-      // Chunk the text into manageable pieces
-      const { chunks } = await text.chunkText({
-        text: extractedText,
-        maxTokens: 800,
-        overlap: 120,
-      });
+      // Chunk the text into safe sizes
+      const chunks = chunkText(extractedText);
 
       if (chunks.length === 0) {
         throw new Error("No chunks generated from script text");
       }
 
-      // Generate embeddings for chunks - process in batches to avoid memory issues
-      const { embeddings: chunkEmbeddings } = await embeddings.generateEmbeddings({
-        texts: chunks.map(c => c.text),
-      });
+      console.log(`Processing ${chunks.length} chunks for submission ${req.submissionId}`);
 
       // Delete existing chunks for this submission
       await db.exec`
         DELETE FROM script_chunks WHERE submission_id = ${req.submissionId}
       `;
 
-      // Insert new chunks with embeddings in batches
-      const batchSize = 50;
-      for (let i = 0; i < chunks.length; i += batchSize) {
-        const batchChunks = chunks.slice(i, i + batchSize);
-        const batchEmbeddings = chunkEmbeddings.slice(i, i + batchSize);
+      // Process chunks with controlled concurrency to avoid rate limits
+      const BATCH_SIZE = 3; // Safe concurrency limit
+      let processedCount = 0;
+      
+      for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
+        const batch = chunks.slice(i, i + BATCH_SIZE);
         
-        for (let j = 0; j < batchChunks.length; j++) {
-          const chunk = batchChunks[j];
-          const embedding = batchEmbeddings[j];
-          
-          if (vectorAvailable) {
-            try {
-              await db.exec`
-                INSERT INTO script_chunks (submission_id, scene_index, page_start, page_end, text, embedding)
-                VALUES (${req.submissionId}, ${null}, ${null}, ${null}, ${chunk.text}, ${JSON.stringify(embedding)}::vector)
-              `;
-            } catch (vectorError) {
-              console.warn("Vector insert failed, falling back to JSON:", vectorError);
-              // Fallback to JSON string storage
-              await db.exec`
-                INSERT INTO script_chunks (submission_id, scene_index, page_start, page_end, text, embedding)
-                VALUES (${req.submissionId}, ${null}, ${null}, ${null}, ${chunk.text}, ${JSON.stringify(embedding)})
-              `;
-            }
-          } else {
-            // Store embedding as JSON string when vector type is not available
-            await db.exec`
-              INSERT INTO script_chunks (submission_id, scene_index, page_start, page_end, text, embedding)
-              VALUES (${req.submissionId}, ${null}, ${null}, ${null}, ${chunk.text}, ${JSON.stringify(embedding)})
-            `;
+        const batchPromises = batch.map(async (chunk) => {
+          try {
+            await embeddings.embedChunk({
+              submissionId: req.submissionId,
+              chunkIndex: chunk.index,
+              text: chunk.text,
+            });
+            return true;
+          } catch (error) {
+            console.error(`Failed to process chunk ${chunk.index}:`, error);
+            return false;
           }
+        });
+        
+        const results = await Promise.allSettled(batchPromises);
+        const successful = results.filter(r => r.status === 'fulfilled' && r.value === true).length;
+        processedCount += successful;
+        
+        // Add small delay between batches to avoid rate limiting
+        if (i + BATCH_SIZE < chunks.length) {
+          await new Promise(resolve => setTimeout(resolve, 100));
         }
       }
 
-      console.log(`Successfully processed script for submission ${req.submissionId} with ${chunks.length} chunks`);
+      if (processedCount === 0) {
+        throw new Error("Failed to process any chunks successfully");
+      }
+
+      if (processedCount < chunks.length) {
+        console.warn(`Only processed ${processedCount}/${chunks.length} chunks successfully`);
+      }
+
+      console.log(`Successfully processed ${processedCount} chunks for submission ${req.submissionId}`);
+
+      return { 
+        ok: true, 
+        chunksProcessed: processedCount 
+      };
 
     } catch (error) {
       console.error(`Failed to process script for submission ${req.submissionId}:`, error);
+      
+      // Surface clear errors instead of generic "internal"
+      if (error instanceof Error) {
+        if (error.message.includes('payload_too_large') || (error as any).code === 'payload_too_large') {
+          const newError = new Error(error.message);
+          (newError as any).code = 'failed_precondition';
+          throw newError;
+        }
+        if (error.message.includes('length limit exceeded')) {
+          const newError = new Error('Script content is too large to process. Please reduce file size or split into smaller parts.');
+          (newError as any).code = 'failed_precondition';
+          throw newError;
+        }
+      }
+      
       throw error;
     }
-
-    return { ok: true };
   }
 );

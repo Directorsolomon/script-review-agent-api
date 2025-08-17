@@ -54,11 +54,13 @@ export const processReview = api<ProcessReviewRequest, ProcessReviewResponse>(
     `;
 
     try {
-      // Process script embeddings from S3 - this should be the only place large content is handled
-      await embeddings.processScript({
+      // Process script embeddings from S3 using safe chunking
+      const embedResult = await embeddings.processScript({
         submissionId: req.submissionId,
         s3Key: submission.file_s3_key,
       });
+
+      console.log(`Processed ${embedResult.chunksProcessed} chunks for submission ${req.submissionId}`);
 
       // Prepare submission metadata for agents - only metadata, no large content
       const submissionMetadata = {
@@ -209,13 +211,35 @@ export const processReview = api<ProcessReviewRequest, ProcessReviewResponse>(
     } catch (error) {
       console.error(`Failed to process review for submission ${req.submissionId}:`, error);
       
+      // Surface clear errors instead of generic "internal"
+      let errorMessage = "Review processing failed";
+      let errorCode = "internal";
+      
+      if (error instanceof Error) {
+        if (error.message.includes('payload_too_large') || (error as any).code === 'payload_too_large') {
+          errorMessage = error.message;
+          errorCode = "failed_precondition";
+        } else if (error.message.includes('failed_precondition') || (error as any).code === 'failed_precondition') {
+          errorMessage = error.message;
+          errorCode = "failed_precondition";
+        } else if (error.message.includes('embedding failed')) {
+          errorMessage = `Script processing failed: ${error.message}`;
+          errorCode = "failed_precondition";
+        } else if (error.message) {
+          errorMessage = error.message;
+        }
+      }
+      
       // Update submission status to failed
       await db.exec`
         UPDATE submissions 
         SET status = 'failed' 
         WHERE id = ${req.submissionId}
       `;
-      throw error;
+      
+      const newError = new Error(errorMessage);
+      (newError as any).code = errorCode;
+      throw newError;
     }
 
     return { ok: true };

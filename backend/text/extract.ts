@@ -13,8 +13,8 @@ export interface ExtractTextResponse {
   text: string;
 }
 
-// Maximum text length for processing (approximately 15,000 words)
-const MAX_TEXT_LENGTH = 100000; // characters
+// Maximum text length for processing (approximately 1 million characters)
+const MAX_TEXT_LENGTH = 1_000_000; // 1MB of text as hard cap
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
 // Extracts text from PDF/DOCX files stored in S3
@@ -63,10 +63,15 @@ export const extractText = api<ExtractTextRequest, ExtractTextResponse>(
       throw APIError.internal("Failed to extract text from file. Please ensure the file is not corrupted.");
     }
     
-    // Validate extracted text length
+    // Validate extracted text length - fail fast with clear error
     if (extractedText.length > MAX_TEXT_LENGTH) {
-      console.warn(`Extracted text too long (${extractedText.length} chars), truncating to ${MAX_TEXT_LENGTH} chars`);
-      extractedText = extractedText.substring(0, MAX_TEXT_LENGTH) + "\n\n[Text truncated due to length limit]";
+      const textSizeMB = Math.round(extractedText.length / 1024 / 1024 * 10) / 10;
+      const maxSizeMB = Math.round(MAX_TEXT_LENGTH / 1024 / 1024 * 10) / 10;
+      
+      const error = new Error(`Script too large (${textSizeMB}MB text). Please upload a smaller file or split into parts. Maximum allowed: ${maxSizeMB}MB.`);
+      (error as any).code = 'payload_too_large';
+      (error as any).httpStatus = 413;
+      throw error;
     }
     
     if (extractedText.trim().length === 0) {
