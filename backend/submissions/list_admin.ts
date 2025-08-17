@@ -1,6 +1,5 @@
-import { api, Query, APIError } from "encore.dev/api";
+import { api, Query } from "encore.dev/api";
 import { db } from "../database/db";
-import { getAuthData } from "~encore/auth";
 import type { SubmissionRecord } from "../types/types";
 
 export interface ListAdminSubmissionsRequest {
@@ -19,17 +18,10 @@ export interface ListAdminSubmissionsResponse {
   total: number;
 }
 
-// Lists all submissions for admin users with filtering
+// Lists all submissions with filtering
 export const listAdminSubmissions = api<ListAdminSubmissionsRequest, ListAdminSubmissionsResponse>(
-  { auth: true, expose: true, method: "GET", path: "/admin/submissions" },
+  { expose: true, method: "GET", path: "/admin/submissions" },
   async (req) => {
-    const auth = getAuthData()!;
-    
-    // Check admin permissions
-    if (!['admin', 'editor', 'viewer'].includes(auth.role)) {
-      throw APIError.permissionDenied("Insufficient permissions");
-    }
-
     const limit = req.limit || 50;
     const offset = req.offset || 0;
 

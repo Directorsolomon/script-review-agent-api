@@ -1,12 +1,11 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { useAuth, useBackend } from "./components/AuthProvider";
-import RouteGuard from "./components/RouteGuard";
-import Navigation from "./components/Navigation";
+import React, { useMemo, useState } from "react";
 import { useRouter } from "./components/Router";
+import Navigation from "./components/Navigation";
 import ConfirmDialog from "./components/ConfirmDialog";
 import ValidationMessage from "./components/ValidationMessage";
 import Button from "./components/Button";
 import LoadingSpinner from "./components/LoadingSpinner";
+import backend from "~backend/client";
 
 // ----------------------------- Utilities -----------------------------
 async function uploadToPresignedURL(url: string, file: File) {
@@ -110,7 +109,7 @@ function Modal({ isOpen, onClose, title, children }: { isOpen: boolean; onClose:
 }
 
 function SuccessMessage({ message, onClose }: { message: string; onClose: () => void }) {
-  useEffect(() => {
+  React.useEffect(() => {
     const timer = setTimeout(onClose, 5000);
     return () => clearTimeout(timer);
   }, [onClose]);
@@ -180,9 +179,8 @@ function EditDocModal({ doc, isOpen, onClose, onSave }: {
   });
   const [busy, setBusy] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const backend = useBackend();
 
-  useEffect(() => {
+  React.useEffect(() => {
     if (doc) {
       setFormData({
         title: doc.title,
@@ -381,7 +379,6 @@ function DocsTab() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<AdminDoc | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const backend = useBackend();
 
   async function loadDocs() {
     try {
@@ -393,7 +390,7 @@ function DocsTab() {
     }
   }
 
-  useEffect(() => {
+  React.useEffect(() => {
     loadDocs();
   }, []);
 
@@ -726,7 +723,6 @@ function SubmissionsTab() {
     region: "",
     platform: "",
   });
-  const backend = useBackend();
 
   async function loadSubmissions() {
     try {
@@ -747,7 +743,7 @@ function SubmissionsTab() {
     }
   }
 
-  useEffect(() => {
+  React.useEffect(() => {
     loadSubmissions();
   }, [filters]);
 
@@ -921,14 +917,11 @@ function SubmissionsTab() {
 // ----------------------------- Admin Tabs -----------------------------
 function AdminTabs() {
   const [activeTab, setActiveTab] = useState('docs');
-  const { user } = useAuth();
 
   const tabs = [
     { id: 'docs', label: 'Documentation', component: DocsTab },
     { id: 'submissions', label: 'Submissions', component: SubmissionsTab },
   ];
-
-  const canEdit = user && ['admin', 'editor'].includes(user.role);
 
   return (
     <div className="space-y-8">
@@ -971,17 +964,15 @@ export default function AdminApp() {
   const { currentPath, navigate } = useRouter();
 
   return (
-    <RouteGuard requiredRoles={['admin', 'editor', 'viewer']}>
-      <div className="min-h-screen bg-gray-50">
-        <Navigation currentPath={currentPath} navigate={navigate} />
-        <main className="max-w-7xl mx-auto px-6 py-12">
-          <div className="mb-12">
-            <h1 className="text-2xl font-bold text-gray-900 mb-2">Admin Panel</h1>
-            <p className="text-gray-600">Manage documentation and review submissions</p>
-          </div>
-          <AdminTabs />
-        </main>
-      </div>
-    </RouteGuard>
+    <div className="min-h-screen bg-gray-50">
+      <Navigation currentPath={currentPath} navigate={navigate} />
+      <main className="max-w-7xl mx-auto px-6 py-12">
+        <div className="mb-12">
+          <h1 className="text-2xl font-bold text-gray-900 mb-2">Admin Panel</h1>
+          <p className="text-gray-600">Manage documentation and review submissions</p>
+        </div>
+        <AdminTabs />
+      </main>
+    </div>
   );
 }

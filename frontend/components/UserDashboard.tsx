@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from "react";
-import { useBackend } from "./AuthProvider";
 import ValidationMessage from "./ValidationMessage";
 import Button from "./Button";
 import LoadingSpinner from "./LoadingSpinner";
+import backend from "~backend/client";
 
 interface Submission {
   id: string;
@@ -53,21 +53,48 @@ function EmptyState({ title, description, action }: {
   );
 }
 
+function Input({ error, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { error?: boolean }) {
+  function cx(...classes: (string | false | undefined | null)[]) {
+    return classes.filter(Boolean).join(" ");
+  }
+
+  return (
+    <input
+      {...props}
+      className={cx(
+        "w-full rounded-lg border px-3 py-2 text-sm transition-colors",
+        "focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-1",
+        "placeholder:text-gray-400",
+        error ? "border-red-300 focus:ring-red-500" : "border-gray-200",
+        props.className
+      )}
+    />
+  );
+}
+
 export default function UserDashboard() {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
-  const backend = useBackend();
+  const [emailFilter, setEmailFilter] = useState("");
 
   useEffect(() => {
-    loadSubmissions();
+    setLoading(false);
   }, []);
 
   async function loadSubmissions() {
+    if (!emailFilter.trim()) {
+      setSubmissions([]);
+      return;
+    }
+
+    setLoading(true);
     try {
       setError(null);
-      const response = await backend.submissions.listUserSubmissions();
+      const response = await backend.submissions.listUserSubmissions({
+        writer_email: emailFilter.trim(),
+      });
       setSubmissions(response.items);
     } catch (e: any) {
       console.error("Failed to load submissions:", e);
@@ -163,17 +190,6 @@ export default function UserDashboard() {
     });
   }
 
-  if (loading) {
-    return (
-      <div className="max-w-6xl mx-auto px-6 py-12">
-        <div className="flex items-center justify-center py-12">
-          <LoadingSpinner size="lg" />
-          <span className="ml-3 text-gray-600">Loading your submissions...</span>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="max-w-6xl mx-auto px-6 py-12">
       <div className="mb-12">
@@ -183,21 +199,42 @@ export default function UserDashboard() {
 
       <Card 
         title="Script Submissions" 
-        description={`${submissions.length} total submission${submissions.length !== 1 ? 's' : ''}`}
+        description="Enter your email address to view your submissions"
         actions={
           <Button onClick={() => window.location.href = "/#submit"} size="sm">
             Submit New Script
           </Button>
         }
       >
+        <div className="mb-6">
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <Input
+                type="email"
+                placeholder="Enter your email address"
+                value={emailFilter}
+                onChange={(e) => setEmailFilter(e.target.value)}
+              />
+            </div>
+            <Button onClick={loadSubmissions} disabled={loading || !emailFilter.trim()}>
+              {loading ? <LoadingSpinner size="sm" /> : "Load Submissions"}
+            </Button>
+          </div>
+        </div>
+
         {error && (
           <ValidationMessage type="error" message={error} className="mb-6" />
         )}
         
-        {submissions.length === 0 ? (
+        {!emailFilter.trim() ? (
           <EmptyState
-            title="No submissions yet"
-            description="Submit your first script to get professional feedback and actionable recommendations."
+            title="Enter your email to view submissions"
+            description="Please enter the email address you used when submitting your scripts to view your submission history and reports."
+          />
+        ) : submissions.length === 0 && !loading ? (
+          <EmptyState
+            title="No submissions found"
+            description="No submissions found for this email address. Submit your first script to get professional feedback and actionable recommendations."
             action={
               <Button onClick={() => window.location.href = "/#submit"}>
                 Submit Your First Script

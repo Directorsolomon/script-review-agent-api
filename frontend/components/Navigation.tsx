@@ -1,5 +1,4 @@
 import React from "react";
-import { useAuth } from "./AuthProvider";
 import Button from "./Button";
 
 interface NavigationProps {
@@ -8,8 +7,6 @@ interface NavigationProps {
 }
 
 export default function Navigation({ currentPath, navigate }: NavigationProps) {
-  const { user, logout } = useAuth();
-
   const isAdminPath = currentPath.startsWith('/admin');
   const isDashboardPath = currentPath === '/dashboard';
 
@@ -26,7 +23,7 @@ export default function Navigation({ currentPath, navigate }: NavigationProps) {
             </button>
 
             {/* Navigation breadcrumbs for admin */}
-            {isAdminPath && user && ['admin', 'editor', 'viewer'].includes(user.role) && (
+            {isAdminPath && (
               <div className="flex items-center space-x-2 text-sm text-gray-500">
                 <span>/</span>
                 <span className="text-gray-900 font-medium">Admin Panel</span>
@@ -35,56 +32,37 @@ export default function Navigation({ currentPath, navigate }: NavigationProps) {
           </div>
 
           <div className="flex items-center space-x-4">
-            {user ? (
+            {!isAdminPath && !isDashboardPath && (
               <>
-                {/* User is logged in */}
-                <div className="flex items-center space-x-4">
-                  {!isAdminPath && !isDashboardPath && (
-                    <Button variant="ghost" onClick={() => navigate('/dashboard')}>
-                      Dashboard
-                    </Button>
-                  )}
-                  
-                  {['admin', 'editor', 'viewer'].includes(user.role) && (
-                    <>
-                      {!isAdminPath && (
-                        <Button variant="ghost" onClick={() => navigate('/admin')}>
-                          Admin Panel
-                        </Button>
-                      )}
-                      {isAdminPath && (
-                        <Button variant="ghost" onClick={() => navigate('/dashboard')}>
-                          Back to Dashboard
-                        </Button>
-                      )}
-                    </>
-                  )}
-
-                  <div className="flex items-center space-x-3">
-                    <span className="text-sm text-gray-600">
-                      {user.name} 
-                      <span className="text-gray-400 ml-1">({user.role})</span>
-                    </span>
-                    <Button variant="outline" size="sm" onClick={logout}>
-                      Sign Out
-                    </Button>
-                  </div>
-                </div>
+                <Button variant="ghost" onClick={() => navigate('/dashboard')}>
+                  Dashboard
+                </Button>
+                <Button variant="ghost" onClick={() => navigate('/admin')}>
+                  Admin Panel
+                </Button>
+                <Button variant="ghost" onClick={() => navigate('#submit')}>
+                  Submit Script
+                </Button>
+                <Button variant="ghost" onClick={() => navigate('#status')}>
+                  Check Status
+                </Button>
               </>
-            ) : (
+            )}
+            
+            {isAdminPath && (
+              <Button variant="ghost" onClick={() => navigate('/dashboard')}>
+                Back to Dashboard
+              </Button>
+            )}
+
+            {isDashboardPath && (
               <>
-                {/* User is not logged in */}
-                <div className="flex items-center space-x-4">
-                  <Button variant="ghost" onClick={() => navigate('#submit')}>
-                    Submit Script
-                  </Button>
-                  <Button variant="ghost" onClick={() => navigate('#status')}>
-                    Check Status
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => navigate('/login')}>
-                    Sign In
-                  </Button>
-                </div>
+                <Button variant="ghost" onClick={() => navigate('/admin')}>
+                  Admin Panel
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => navigate('/')}>
+                  Home
+                </Button>
               </>
             )}
           </div>

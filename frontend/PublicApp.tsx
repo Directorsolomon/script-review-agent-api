@@ -1,10 +1,10 @@
 import React, { useMemo, useState } from "react";
-import { useAuth, useBackend } from "./components/AuthProvider";
 import { useRouter } from "./components/Router";
 import Navigation from "./components/Navigation";
 import ValidationMessage from "./components/ValidationMessage";
 import Button from "./components/Button";
 import LoadingSpinner from "./components/LoadingSpinner";
+import backend from "~backend/client";
 
 // ----------------------------- Utils -----------------------------
 function cx(...classes: (string | false | undefined | null)[]) {
@@ -165,7 +165,6 @@ function SubmissionForm() {
   const [busy, setBusy] = useState(false);
   const [success, setSuccess] = useState<{ submissionId: string } | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  const backend = useBackend();
 
   async function uploadToPresignedURL(url: string, file: File) {
     const res = await fetch(url, { 
@@ -494,7 +493,6 @@ function StatusLookup() {
   const [error, setError] = useState<string | null>(null);
   const [report, setReport] = useState<any | null>(null);
   const [retrying, setRetrying] = useState(false);
-  const backend = useBackend();
 
   function validateSubmissionId(id: string): boolean {
     // Basic UUID validation

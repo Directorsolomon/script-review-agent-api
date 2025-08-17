@@ -1,6 +1,5 @@
 import { api, APIError } from "encore.dev/api";
 import { db } from "../database/db";
-import { getAuthData } from "~encore/auth";
 import type { DocType, Region, Platform } from "../types/types";
 
 export interface UpdateDocRequest {
@@ -18,17 +17,10 @@ export interface UpdateDocResponse {
   ok: boolean;
 }
 
-// Updates an admin document's metadata with auth check
+// Updates an admin document's metadata
 export const updateDoc = api<UpdateDocRequest, UpdateDocResponse>(
-  { auth: true, expose: true, method: "PATCH", path: "/admin/docs/:id" },
+  { expose: true, method: "PATCH", path: "/admin/docs/:id" },
   async (req) => {
-    const auth = getAuthData()!;
-    
-    // Check admin permissions
-    if (!['admin', 'editor'].includes(auth.role)) {
-      throw APIError.permissionDenied("Insufficient permissions");
-    }
-
     // Check if document exists
     const doc = await db.queryRow`
       SELECT id FROM docs WHERE id = ${req.id}

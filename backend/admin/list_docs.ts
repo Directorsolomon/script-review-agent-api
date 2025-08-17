@@ -1,23 +1,15 @@
-import { api, APIError } from "encore.dev/api";
+import { api } from "encore.dev/api";
 import { db } from "../database/db";
-import { getAuthData } from "~encore/auth";
 import type { DocRecord } from "../types/types";
 
 export interface ListDocsResponse {
   items: DocRecord[];
 }
 
-// Lists all admin documents with auth check
+// Lists all admin documents
 export const listDocs = api<void, ListDocsResponse>(
-  { auth: true, expose: true, method: "GET", path: "/admin/docs" },
+  { expose: true, method: "GET", path: "/admin/docs" },
   async () => {
-    const auth = getAuthData()!;
-    
-    // Check admin permissions
-    if (!['admin', 'editor', 'viewer'].includes(auth.role)) {
-      throw APIError.permissionDenied("Insufficient permissions");
-    }
-
     const docs = await db.queryAll<DocRecord>`
       SELECT id, title, version, doc_type, region, platform, tags, status, s3_key, 
              created_at, updated_at

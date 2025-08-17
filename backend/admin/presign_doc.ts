@@ -1,7 +1,6 @@
-import { api, APIError } from "encore.dev/api";
+import { api } from "encore.dev/api";
 import { storage } from "~encore/clients";
 import { db } from "../database/db";
-import { getAuthData } from "~encore/auth";
 import type { DocType, Region, Platform } from "../types/types";
 
 export interface PresignDocRequest {
@@ -22,17 +21,10 @@ export interface PresignDocResponse {
   s3Key: string;
 }
 
-// Creates a presigned URL for admin document uploads with auth check
+// Creates a presigned URL for admin document uploads
 export const presignDoc = api<PresignDocRequest, PresignDocResponse>(
-  { auth: true, expose: true, method: "POST", path: "/admin/docs/presign" },
+  { expose: true, method: "POST", path: "/admin/docs/presign" },
   async (req) => {
-    const auth = getAuthData()!;
-    
-    // Check admin permissions
-    if (!['admin', 'editor'].includes(auth.role)) {
-      throw APIError.permissionDenied("Insufficient permissions");
-    }
-
     const { uploadUrl, s3Key } = await storage.presignDoc({
       filename: req.filename,
       contentType: req.contentType,
