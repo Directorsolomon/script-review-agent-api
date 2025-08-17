@@ -155,7 +155,7 @@ function SubmissionForm() {
         file_s3_key: presign.s3Key,
       });
 
-      // Start review process
+      // Start review process - pass submissionId as path parameter
       try {
         await backend.review.run({ submissionId: created.submissionId });
       } catch (err) {

@@ -356,7 +356,7 @@ function SubmissionsTab() {
         file_s3_key: presign.s3Key,
       });
 
-      // 3) kick review immediately
+      // 3) kick review immediately - pass submissionId as path parameter
       try {
         await backend.review.run({ submissionId: created.submissionId });
       } catch (err) {
