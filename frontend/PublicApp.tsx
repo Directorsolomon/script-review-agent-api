@@ -100,6 +100,24 @@ function FormField({ label, error, required, children }: {
   );
 }
 
+function SuccessMessage({ message, onClose }: { message: string; onClose: () => void }) {
+  return (
+    <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-6">
+      <div className="flex items-center gap-3">
+        <div className="text-green-600">✓</div>
+        <p className="text-sm text-green-700">{message}</p>
+        <button
+          onClick={onClose}
+          className="text-green-400 hover:text-green-600 ml-auto"
+          aria-label="Close"
+        >
+          ×
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ----------------------------- Home Hero -----------------------------
 function Hero() {
   const { navigate } = useRouter();
@@ -146,6 +164,7 @@ function SubmissionForm() {
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [success, setSuccess] = useState<{ submissionId: string } | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const backend = useBackend();
 
   async function uploadToPresignedURL(url: string, file: File) {
@@ -160,19 +179,45 @@ function SubmissionForm() {
   function validateForm() {
     const newErrors: Record<string, string> = {};
     
-    if (!formData.writerName.trim()) newErrors.writerName = "Writer name is required";
-    if (!formData.writerEmail.trim()) newErrors.writerEmail = "Email is required";
-    if (!formData.scriptTitle.trim()) newErrors.scriptTitle = "Script title is required";
-    if (!formData.file) newErrors.file = "Please choose a script file";
-    if (!formData.agree) newErrors.agree = "Please agree to the terms";
-    
-    if (formData.file && formData.file.size > 20 * 1024 * 1024) {
-      newErrors.file = "File too large (20 MB max)";
+    if (!formData.writerName.trim()) {
+      newErrors.writerName = "Writer name is required";
     }
     
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (formData.writerEmail && !emailRegex.test(formData.writerEmail)) {
-      newErrors.writerEmail = "Please enter a valid email address";
+    if (!formData.writerEmail.trim()) {
+      newErrors.writerEmail = "Email is required";
+    } else {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(formData.writerEmail)) {
+        newErrors.writerEmail = "Please enter a valid email address";
+      }
+    }
+    
+    if (!formData.scriptTitle.trim()) {
+      newErrors.scriptTitle = "Script title is required";
+    }
+    
+    if (!formData.file) {
+      newErrors.file = "Please choose a script file";
+    } else {
+      if (formData.file.size > 20 * 1024 * 1024) {
+        newErrors.file = "File too large (20 MB max)";
+      }
+      
+      const allowedTypes = [
+        'application/pdf',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/msword',
+        'text/plain',
+        'application/x-fdx'
+      ];
+      
+      if (!allowedTypes.includes(formData.file.type) && !formData.file.name.match(/\.(pdf|docx|doc|fdx|txt)$/i)) {
+        newErrors.file = "Unsupported file type. Please use PDF, DOCX, DOC, FDX, or TXT files.";
+      }
+    }
+    
+    if (!formData.agree) {
+      newErrors.agree = "Please agree to the terms";
     }
     
     setErrors(newErrors);
@@ -197,12 +242,12 @@ function SubmissionForm() {
       await uploadToPresignedURL(presign.uploadUrl, formData.file!);
 
       const created = await backend.submissions.create({
-        writer_name: formData.writerName,
-        writer_email: formData.writerEmail,
-        script_title: formData.scriptTitle,
+        writer_name: formData.writerName.trim(),
+        writer_email: formData.writerEmail.trim(),
+        script_title: formData.scriptTitle.trim(),
         format: formData.format as any,
         draft_version: formData.draftVersion as any,
-        genre: formData.genre || undefined,
+        genre: formData.genre.trim() || undefined,
         region: formData.region as any,
         platform: formData.platform as any,
         file_s3_key: presign.s3Key,
@@ -229,6 +274,10 @@ function SubmissionForm() {
         agree: false,
       });
       
+      // Reset file input
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      if (fileInput) fileInput.value = '';
+      
     } catch (e: any) {
       console.error("Submission error:", e);
       setErrors({ submit: e.message || "Failed to submit script" });
@@ -247,13 +296,26 @@ function SubmissionForm() {
   if (success) {
     return (
       <div className="text-center py-12">
-        <h3 className="text-xl font-semibold text-gray-900 mb-4">Script Submitted</h3>
-        <p className="text-gray-600 mb-6">
-          Your submission ID:
-        </p>
-        <div className="bg-gray-50 rounded-lg p-4 mb-8 max-w-md mx-auto">
-          <code className="text-sm font-mono text-gray-900">{success.submissionId}</code>
+        <div className="mb-6">
+          <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <div className="text-green-600 text-2xl">✓</div>
+          </div>
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">Script Submitted Successfully!</h3>
+          <p className="text-gray-600">
+            Your script has been uploaded and the review process has started.
+          </p>
         </div>
+        
+        <div className="bg-gray-50 rounded-lg p-6 mb-8 max-w-md mx-auto">
+          <p className="text-sm text-gray-600 mb-2">Your submission ID:</p>
+          <code className="text-sm font-mono text-gray-900 bg-white px-3 py-2 rounded border">
+            {success.submissionId}
+          </code>
+          <p className="text-xs text-gray-500 mt-2">
+            Save this ID to check your review status later
+          </p>
+        </div>
+        
         <div className="flex flex-col sm:flex-row gap-3 justify-center">
           <Button onClick={() => window.location.href = "#status"}>
             Check Status
@@ -262,12 +324,26 @@ function SubmissionForm() {
             variant="outline"
             onClick={async () => {
               const ok = await safeCopyToClipboard(success.submissionId);
-              if (!ok) alert('Copy failed. Please select the ID and copy manually.');
+              if (ok) {
+                setSuccessMessage("Submission ID copied to clipboard!");
+                setTimeout(() => setSuccessMessage(null), 3000);
+              } else {
+                alert('Copy failed. Please select the ID and copy manually.');
+              }
             }}
           >
             Copy ID
           </Button>
         </div>
+        
+        {successMessage && (
+          <div className="mt-4">
+            <SuccessMessage 
+              message={successMessage} 
+              onClose={() => setSuccessMessage(null)} 
+            />
+          </div>
+        )}
       </div>
     );
   }
@@ -363,12 +439,12 @@ function SubmissionForm() {
         <div className="space-y-2">
           <Input
             type="file"
-            accept=".pdf,.docx,.fdx,.txt"
+            accept=".pdf,.docx,.doc,.fdx,.txt"
             onChange={(e) => updateFormData('file', e.target.files?.[0] || null)}
             error={!!errors.file}
           />
           <p className="text-sm text-gray-500">
-            Supported formats: PDF, DOCX, FDX, TXT • Maximum size: 20 MB
+            Supported formats: PDF, DOCX, DOC, FDX, TXT • Maximum size: 20 MB
           </p>
         </div>
       </FormField>
@@ -383,7 +459,7 @@ function SubmissionForm() {
             className="mt-1 h-4 w-4 text-gray-900 focus:ring-gray-900 border-gray-300 rounded"
           />
           <label htmlFor="agree" className="text-sm text-gray-600">
-            I agree to the data retention policy and terms of service.
+            I agree to the data retention policy and terms of service. My script will be processed for review purposes only.
           </label>
         </div>
         {errors.agree && <p className="text-sm text-red-600">{errors.agree}</p>}
@@ -417,14 +493,33 @@ function StatusLookup() {
   const [report, setReport] = useState<any | null>(null);
   const backend = useBackend();
 
+  function validateSubmissionId(id: string): boolean {
+    // Basic UUID validation
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    return uuidRegex.test(id.trim());
+  }
+
   async function fetchReport(e: React.FormEvent) {
     e.preventDefault();
+    
+    const trimmedId = submissionId.trim();
+    
+    if (!trimmedId) {
+      setError("Please enter a submission ID");
+      return;
+    }
+    
+    if (!validateSubmissionId(trimmedId)) {
+      setError("Please enter a valid submission ID (should be in UUID format)");
+      return;
+    }
+    
     setError(null);
     setReport(null);
     setLoading(true);
     
     try {
-      const r = await backend.review.getReport({ submissionId: submissionId.trim() });
+      const r = await backend.review.getReport({ submissionId: trimmedId });
       setReport(r);
     } catch (e: any) {
       console.error("Failed to fetch report:", e);
@@ -447,9 +542,12 @@ function StatusLookup() {
             <div className="flex gap-3">
               <div className="flex-1">
                 <Input
-                  placeholder="Enter your submission ID"
+                  placeholder="Enter your submission ID (e.g., 123e4567-e89b-12d3-a456-426614174000)"
                   value={submissionId}
-                  onChange={(e) => setSubmissionId(e.target.value)}
+                  onChange={(e) => {
+                    setSubmissionId(e.target.value);
+                    if (error) setError(null);
+                  }}
                   required
                   error={!!error}
                 />
@@ -479,8 +577,9 @@ function StatusLookup() {
                   {Array.isArray(reportData.highlights) && reportData.highlights.length > 0 ? (
                     <ul className="space-y-2">
                       {reportData.highlights.map((highlight: string, i: number) => (
-                        <li key={i} className="text-sm text-gray-700">
-                          {highlight}
+                        <li key={i} className="text-sm text-gray-700 flex items-start gap-2">
+                          <span className="text-green-600 mt-0.5">•</span>
+                          <span>{highlight}</span>
                         </li>
                       ))}
                     </ul>
@@ -494,8 +593,9 @@ function StatusLookup() {
                   {Array.isArray(reportData.risks) && reportData.risks.length > 0 ? (
                     <ul className="space-y-2">
                       {reportData.risks.map((risk: string, i: number) => (
-                        <li key={i} className="text-sm text-gray-700">
-                          {risk}
+                        <li key={i} className="text-sm text-gray-700 flex items-start gap-2">
+                          <span className="text-orange-600 mt-0.5">•</span>
+                          <span>{risk}</span>
                         </li>
                       ))}
                     </ul>
@@ -511,7 +611,17 @@ function StatusLookup() {
                   <div className="space-y-3">
                     {reportData.action_plan.map((action: any, i: number) => (
                       <div key={i} className="bg-gray-50 rounded-lg p-4">
-                        <p className="text-sm text-gray-700">{action.description}</p>
+                        <div className="flex items-start gap-3">
+                          <span className={cx(
+                            "inline-flex items-center px-2 py-1 rounded-full text-xs font-medium",
+                            action.priority === 'high' && "bg-red-100 text-red-800",
+                            action.priority === 'med' && "bg-yellow-100 text-yellow-800",
+                            action.priority === 'low' && "bg-green-100 text-green-800"
+                          )}>
+                            {action.priority?.toUpperCase() || 'MED'}
+                          </span>
+                          <p className="text-sm text-gray-700 flex-1">{action.description}</p>
+                        </div>
                       </div>
                     ))}
                   </div>

@@ -109,6 +109,29 @@ function Modal({ isOpen, onClose, title, children }: { isOpen: boolean; onClose:
   );
 }
 
+function SuccessMessage({ message, onClose }: { message: string; onClose: () => void }) {
+  useEffect(() => {
+    const timer = setTimeout(onClose, 5000);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
+  return (
+    <div className="fixed top-4 right-4 z-50 bg-green-50 border border-green-200 rounded-lg p-4 shadow-lg">
+      <div className="flex items-center gap-3">
+        <div className="text-green-600">✓</div>
+        <p className="text-sm text-green-700">{message}</p>
+        <button
+          onClick={onClose}
+          className="text-green-400 hover:text-green-600 ml-2"
+          aria-label="Close"
+        >
+          ×
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ----------------------------- Types -----------------------------
 interface AdminDoc {
   id: string;
@@ -170,21 +193,46 @@ function EditDocModal({ doc, isOpen, onClose, onSave }: {
         tags: (doc.tags || []).join(", "),
         status: doc.status,
       });
+      setErrors({});
     }
   }, [doc]);
+
+  function validateForm() {
+    const newErrors: Record<string, string> = {};
+    
+    if (!formData.title.trim()) {
+      newErrors.title = "Title is required";
+    }
+    
+    if (!formData.version.trim()) {
+      newErrors.version = "Version is required";
+    }
+    
+    if (!formData.docType) {
+      newErrors.docType = "Document type is required";
+    }
+    
+    if (!formData.status) {
+      newErrors.status = "Status is required";
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  }
 
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     if (!doc) return;
     
-    setErrors({});
+    if (!validateForm()) return;
+    
     setBusy(true);
     
     try {
       await backend.admin.updateDoc({
         id: doc.id,
-        title: formData.title,
-        version: formData.version,
+        title: formData.title.trim(),
+        version: formData.version.trim(),
         doc_type: formData.docType as any,
         region: formData.region || undefined,
         platform: formData.platform || undefined,
@@ -196,7 +244,7 @@ function EditDocModal({ doc, isOpen, onClose, onSave }: {
       onClose();
     } catch (e: any) {
       console.error("Update error:", e);
-      setErrors({ submit: e.message });
+      setErrors({ submit: e.message || "Failed to update document" });
     } finally {
       setBusy(false);
     }
@@ -204,33 +252,42 @@ function EditDocModal({ doc, isOpen, onClose, onSave }: {
 
   function updateFormData(field: string, value: string) {
     setFormData(prev => ({ ...prev, [field]: value }));
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: "" }));
+    }
   }
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Edit Document">
       <form onSubmit={handleSave} className="space-y-6">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <FormField label="Title" required>
+          <FormField label="Title" required error={errors.title}>
             <Input
               value={formData.title}
               onChange={(e) => updateFormData('title', e.target.value)}
+              placeholder="Document title"
               required
+              error={!!errors.title}
             />
           </FormField>
 
-          <FormField label="Version" required>
+          <FormField label="Version" required error={errors.version}>
             <Input
               value={formData.version}
               onChange={(e) => updateFormData('version', e.target.value)}
+              placeholder="e.g., 1.0, 2.1"
               required
+              error={!!errors.version}
             />
           </FormField>
 
-          <FormField label="Document Type" required>
+          <FormField label="Document Type" required error={errors.docType}>
             <Select
               value={formData.docType}
               onChange={(e) => updateFormData('docType', e.target.value)}
+              error={!!errors.docType}
             >
+              <option value="">Select type</option>
               <option value="rubric">Rubric</option>
               <option value="style">Style</option>
               <option value="platform">Platform</option>
@@ -240,11 +297,13 @@ function EditDocModal({ doc, isOpen, onClose, onSave }: {
             </Select>
           </FormField>
 
-          <FormField label="Status" required>
+          <FormField label="Status" required error={errors.status}>
             <Select
               value={formData.status}
               onChange={(e) => updateFormData('status', e.target.value)}
+              error={!!errors.status}
             >
+              <option value="">Select status</option>
               <option value="active">Active</option>
               <option value="inactive">Inactive</option>
               <option value="experimental">Experimental</option>
@@ -321,6 +380,7 @@ function DocsTab() {
   const [editingDoc, setEditingDoc] = useState<AdminDoc | null>(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<AdminDoc | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const backend = useBackend();
 
   async function loadDocs() {
@@ -329,7 +389,7 @@ function DocsTab() {
       setDocs(res.items);
     } catch (e: any) {
       console.error("Failed to load docs:", e);
-      setErrors({ load: e.message });
+      setErrors({ load: e.message || "Failed to load documents" });
     }
   }
 
@@ -337,36 +397,63 @@ function DocsTab() {
     loadDocs();
   }, []);
 
-  async function handleUpload(e: React.FormEvent) {
-    e.preventDefault();
-    setErrors({});
+  function validateUploadForm() {
+    const newErrors: Record<string, string> = {};
+    
+    if (!formData.title.trim()) {
+      newErrors.title = "Title is required";
+    }
+    
+    if (!formData.version.trim()) {
+      newErrors.version = "Version is required";
+    }
     
     if (!formData.file) {
-      setErrors({ file: "Please choose a file" });
-      return;
+      newErrors.file = "Please choose a file";
+    } else {
+      if (formData.file.size > 20 * 1024 * 1024) {
+        newErrors.file = "File too large (20 MB max)";
+      }
+      
+      const allowedTypes = [
+        'application/pdf',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'application/msword',
+        'text/plain',
+        'text/markdown'
+      ];
+      
+      if (!allowedTypes.includes(formData.file.type) && !formData.file.name.match(/\.(pdf|docx|doc|txt|md)$/i)) {
+        newErrors.file = "Unsupported file type. Please use PDF, DOCX, DOC, TXT, or MD files.";
+      }
     }
     
-    if (formData.file.size > 20 * 1024 * 1024) {
-      setErrors({ file: "File too large (20 MB max)" });
-      return;
-    }
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  }
+
+  async function handleUpload(e: React.FormEvent) {
+    e.preventDefault();
+    
+    if (!validateUploadForm()) return;
     
     setBusy(true);
+    setErrors({});
     
     try {
       const presign = await backend.admin.presignDoc({
-        filename: formData.file.name,
-        contentType: formData.file.type || "application/octet-stream",
-        size: formData.file.size,
-        title: formData.title,
-        version: formData.version,
+        filename: formData.file!.name,
+        contentType: formData.file!.type || "application/octet-stream",
+        size: formData.file!.size,
+        title: formData.title.trim(),
+        version: formData.version.trim(),
         doc_type: formData.docType as any,
         region: formData.region as any,
         platform: formData.platform as any,
         tags: formData.tags.split(",").map((t) => t.trim()).filter(Boolean),
       });
 
-      await uploadToPresignedURL(presign.uploadUrl, formData.file);
+      await uploadToPresignedURL(presign.uploadUrl, formData.file!);
       await backend.admin.completeDoc({ docId: presign.docId });
       await loadDocs();
       
@@ -379,9 +466,16 @@ function DocsTab() {
         platform: "YouTube",
         tags: "Nollywood,YouTube",
       });
+      
+      setSuccessMessage("Document uploaded and processed successfully!");
+      
+      // Reset file input
+      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement;
+      if (fileInput) fileInput.value = '';
+      
     } catch (e: any) {
       console.error("Upload error:", e);
-      setErrors({ submit: e.message });
+      setErrors({ submit: e.message || "Failed to upload document" });
     } finally {
       setBusy(false);
     }
@@ -392,9 +486,10 @@ function DocsTab() {
       await backend.admin.deleteDoc({ id: doc.id });
       await loadDocs();
       setConfirmDelete(null);
+      setSuccessMessage("Document deleted successfully!");
     } catch (e: any) {
       console.error("Delete error:", e);
-      setErrors({ delete: e.message });
+      setErrors({ delete: e.message || "Failed to delete document" });
     }
   }
 
@@ -407,6 +502,13 @@ function DocsTab() {
 
   return (
     <div className="space-y-12">
+      {successMessage && (
+        <SuccessMessage 
+          message={successMessage} 
+          onClose={() => setSuccessMessage(null)} 
+        />
+      )}
+
       <Card 
         title="Upload Documentation" 
         description="Upload guidelines, rubrics, and platform notes"
@@ -484,12 +586,12 @@ function DocsTab() {
           <FormField label="Document File" required error={errors.file}>
             <Input
               type="file"
-              accept=".pdf,.docx,.md,.txt"
+              accept=".pdf,.docx,.doc,.md,.txt"
               onChange={(e) => updateFormData('file', e.target.files?.[0] || null)}
               error={!!errors.file}
             />
             <p className="text-sm text-gray-500 mt-1">
-              Supported formats: PDF, DOCX, Markdown, TXT • Maximum size: 20 MB
+              Supported formats: PDF, DOCX, DOC, Markdown, TXT • Maximum size: 20 MB
             </p>
           </FormField>
 
@@ -506,6 +608,10 @@ function DocsTab() {
       <Card title="Documentation Library" description={`${docs.length} documents available`}>
         {errors.load && (
           <ValidationMessage type="error" message={errors.load} className="mb-4" />
+        )}
+        
+        {errors.delete && (
+          <ValidationMessage type="error" message={errors.delete} className="mb-4" />
         )}
         
         <div className="overflow-x-auto">
@@ -536,7 +642,14 @@ function DocsTab() {
                   <td className="py-3">{doc.region || "—"}</td>
                   <td className="py-3">{doc.platform || "—"}</td>
                   <td className="py-3">
-                    <span className="text-gray-600">{doc.status}</span>
+                    <span className={cx(
+                      "inline-flex items-center px-2 py-1 rounded-full text-xs font-medium",
+                      doc.status === 'active' && "bg-green-100 text-green-800",
+                      doc.status === 'inactive' && "bg-gray-100 text-gray-800",
+                      doc.status === 'experimental' && "bg-yellow-100 text-yellow-800"
+                    )}>
+                      {doc.status}
+                    </span>
                   </td>
                   <td className="py-3 text-gray-600">
                     {new Date(doc.updated_at).toLocaleDateString()}
@@ -583,7 +696,10 @@ function DocsTab() {
           setShowEditModal(false);
           setEditingDoc(null);
         }}
-        onSave={loadDocs}
+        onSave={() => {
+          loadDocs();
+          setSuccessMessage("Document updated successfully!");
+        }}
       />
 
       <ConfirmDialog
@@ -646,6 +762,16 @@ function SubmissionsTab() {
       case "completed": return "Complete";
       case "failed": return "Failed";
       default: return status;
+    }
+  }
+
+  function getStatusColor(status: string): string {
+    switch (status) {
+      case "queued": return "bg-yellow-100 text-yellow-800";
+      case "processing": return "bg-blue-100 text-blue-800";
+      case "completed": return "bg-green-100 text-green-800";
+      case "failed": return "bg-red-100 text-red-800";
+      default: return "bg-gray-100 text-gray-800";
     }
   }
 
@@ -760,7 +886,10 @@ function SubmissionsTab() {
                   </div>
                 </td>
                 <td className="py-3">
-                  <span className="text-gray-600">
+                  <span className={cx(
+                    "inline-flex items-center px-2 py-1 rounded-full text-xs font-medium",
+                    getStatusColor(submission.status)
+                  )}>
                     {getStatusText(submission.status)}
                   </span>
                 </td>
