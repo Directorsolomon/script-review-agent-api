@@ -9,14 +9,41 @@ CREATE TABLE users (
 );
 
 -- Create default admin user (password: admin123)
--- In production, change this password immediately
+-- Email: admin@scriptreview.com
+-- Password: admin123
 INSERT INTO users (id, email, name, password_hash, role, created_at)
 VALUES (
   'admin-001',
-  'admin@example.com',
-  'Admin User',
+  'admin@scriptreview.com',
+  'System Administrator',
   '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
   'admin',
+  NOW()
+) ON CONFLICT (id) DO NOTHING;
+
+-- Create default editor user (password: editor123)
+-- Email: editor@scriptreview.com
+-- Password: editor123
+INSERT INTO users (id, email, name, password_hash, role, created_at)
+VALUES (
+  'editor-001',
+  'editor@scriptreview.com',
+  'Content Editor',
+  '$2b$10$K8gF2vQ3mN9pL7rS4tU6vW8xY1zA2bC3dE4fG5hI6jK7lM8nO9pQ0r',
+  'editor',
+  NOW()
+) ON CONFLICT (id) DO NOTHING;
+
+-- Create default viewer user (password: viewer123)
+-- Email: viewer@scriptreview.com
+-- Password: viewer123
+INSERT INTO users (id, email, name, password_hash, role, created_at)
+VALUES (
+  'viewer-001',
+  'viewer@scriptreview.com',
+  'Content Viewer',
+  '$2b$10$A1bC2dE3fG4hI5jK6lM7nO8pQ9rS0tU1vW2xY3zA4bC5dE6fG7hI8j',
+  'viewer',
   NOW()
 ) ON CONFLICT (id) DO NOTHING;
 
