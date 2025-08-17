@@ -6,6 +6,28 @@ function cx(...classes: (string | false | undefined | null)[]) {
   return classes.filter(Boolean).join(" ");
 }
 
+async function safeCopyToClipboard(text: string) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {}
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 function Button({ children, className, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button
@@ -173,7 +195,10 @@ function SubmissionForm() {
         </p>
         <div className="mt-4 flex gap-3">
           <a href="#status" className="px-4 py-2 rounded-2xl border bg-white">Go to Status</a>
-          <Button onClick={() => navigator.clipboard.writeText(success.submissionId)}>Copy ID</Button>
+          <Button onClick={async () => {
+            const ok = await safeCopyToClipboard(success.submissionId);
+            if (!ok) alert('Copy failed. Select the text and press Ctrl/Cmd+C.');
+          }}>Copy ID</Button>
         </div>
       </div>
     );

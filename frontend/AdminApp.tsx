@@ -11,6 +11,28 @@ function cx(...classes: (string | false | undefined | null)[]) {
   return classes.filter(Boolean).join(" ");
 }
 
+async function safeCopyToClipboard(text: string) {
+  try {
+    if (navigator.clipboard && window.isSecureContext) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {}
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.left = '-9999px';
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
+
 // ----------------------------- UI Primitives -----------------------------
 function Button({ children, className, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
@@ -154,6 +176,7 @@ function DocsTab() {
     e.preventDefault();
     setError(null);
     if (!file) return setError("Please choose a file.");
+    if (file.size > 20 * 1024 * 1024) return setError("File too large (20 MB max).");
     setBusy(true);
     try {
       const presign = await backend.admin.presignDoc({
@@ -309,6 +332,7 @@ function SubmissionsTab() {
     e.preventDefault();
     setError(null);
     if (!file) return setError("Please choose a script file.");
+    if (file.size > 20 * 1024 * 1024) return setError("File too large (20 MB max).");
     setBusy(true);
     try {
       // 1) presign for script
@@ -363,7 +387,10 @@ function SubmissionsTab() {
               Submission ID: <span className="font-mono font-semibold">{submissionId}</span>
             </p>
             <div className="flex gap-3">
-              <Button onClick={() => navigator.clipboard.writeText(submissionId)}>Copy ID</Button>
+              <Button onClick={async () => {
+                const ok = await safeCopyToClipboard(submissionId);
+                if (!ok) alert('Copy failed. Select the text and press Ctrl/Cmd+C.');
+              }}>Copy ID</Button>
               <Button 
                 className="bg-white text-zinc-900 border" 
                 onClick={() => setSubmissionId(null)}
@@ -510,7 +537,10 @@ function ReportsTab() {
             <h4 className="font-semibold mb-2">Human Reviewer Notes (local draft)</h4>
             <Textarea rows={5} placeholder="Edit or supplement recommendations… (wire to a PATCH /reports/:id later)" value={editorNotes} onChange={(e) => setEditorNotes(e.target.value)} />
             <div className="mt-3 flex gap-2">
-              <Button onClick={() => navigator.clipboard.writeText(editorNotes)}>Copy Notes</Button>
+              <Button onClick={async () => {
+                const ok = await safeCopyToClipboard(editorNotes || "");
+                if (!ok) alert('Copy failed. Select the text and press Ctrl/Cmd+C.');
+              }}>Copy Notes</Button>
               <Button className="bg-white text-zinc-900 border" onClick={() => setEditorNotes("")}>Clear</Button>
             </div>
           </div>
