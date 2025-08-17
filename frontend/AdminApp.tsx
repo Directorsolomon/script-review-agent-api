@@ -34,14 +34,17 @@ async function safeCopyToClipboard(text: string) {
 }
 
 // ----------------------------- UI Primitives -----------------------------
-function Button({ children, className, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+function Button({ children, className, variant = "primary", ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "secondary" | "danger" }) {
+  const baseClasses = "px-4 py-2 rounded-2xl border shadow-sm disabled:opacity-50";
+  const variantClasses = {
+    primary: "border-zinc-200 bg-zinc-900 text-white hover:bg-zinc-800",
+    secondary: "border-zinc-300 bg-white text-zinc-900 hover:bg-zinc-50",
+    danger: "border-red-200 bg-red-600 text-white hover:bg-red-700",
+  };
+
   return (
     <button
-      className={cx(
-        "px-4 py-2 rounded-2xl border border-zinc-200 shadow-sm",
-        "bg-zinc-900 text-white hover:bg-zinc-800 disabled:opacity-50",
-        className
-      )}
+      className={cx(baseClasses, variantClasses[variant], className)}
       {...props}
     >
       {children}
@@ -107,6 +110,28 @@ function Tag({ children }: { children: React.ReactNode }) {
   return <span className="px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-700 text-xs">{children}</span>;
 }
 
+function Modal({ isOpen, onClose, title, children }: { isOpen: boolean; onClose: () => void; title: string; children: React.ReactNode }) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="fixed inset-0 bg-black bg-opacity-50" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-lg max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-4 border-b border-zinc-100">
+          <h3 className="text-lg font-semibold text-zinc-900">{title}</h3>
+          <button
+            onClick={onClose}
+            className="text-zinc-400 hover:text-zinc-600 text-xl leading-none"
+          >
+            ×
+          </button>
+        </div>
+        <div className="p-4">{children}</div>
+      </div>
+    </div>
+  );
+}
+
 // ----------------------------- Types -----------------------------
 interface AdminDoc {
   id: string;
@@ -145,6 +170,129 @@ interface ReportRecord {
   updated_at?: string;
 }
 
+// ----------------------------- Edit Doc Modal -----------------------------
+function EditDocModal({ doc, isOpen, onClose, onSave }: { 
+  doc: AdminDoc | null; 
+  isOpen: boolean; 
+  onClose: () => void; 
+  onSave: () => void; 
+}) {
+  const [title, setTitle] = useState("");
+  const [version, setVersion] = useState("");
+  const [docType, setDocType] = useState("");
+  const [region, setRegion] = useState("");
+  const [platform, setPlatform] = useState("");
+  const [tags, setTags] = useState("");
+  const [status, setStatus] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (doc) {
+      setTitle(doc.title);
+      setVersion(doc.version);
+      setDocType(doc.doc_type);
+      setRegion(doc.region || "");
+      setPlatform(doc.platform || "");
+      setTags((doc.tags || []).join(", "));
+      setStatus(doc.status);
+    }
+  }, [doc]);
+
+  async function handleSave(e: React.FormEvent) {
+    e.preventDefault();
+    if (!doc) return;
+    
+    setError(null);
+    setBusy(true);
+    
+    try {
+      await backend.admin.updateDoc({
+        id: doc.id,
+        title,
+        version,
+        doc_type: docType as any,
+        region: region || undefined,
+        platform: platform || undefined,
+        tags: tags.split(",").map((t) => t.trim()).filter(Boolean),
+        status: status as any,
+      });
+      
+      onSave();
+      onClose();
+    } catch (e: any) {
+      console.error("Update error:", e);
+      setError(e.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal isOpen={isOpen} onClose={onClose} title="Edit Document">
+      <form onSubmit={handleSave} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+          <label className="text-sm text-zinc-600">Title</label>
+          <Input value={title} onChange={(e) => setTitle(e.target.value)} required />
+        </div>
+        <div>
+          <label className="text-sm text-zinc-600">Version</label>
+          <Input value={version} onChange={(e) => setVersion(e.target.value)} required />
+        </div>
+        <div>
+          <label className="text-sm text-zinc-600">Doc Type</label>
+          <Select value={docType} onChange={(e) => setDocType(e.target.value)}>
+            <option value="rubric">Rubric</option>
+            <option value="style">Style</option>
+            <option value="platform">Platform</option>
+            <option value="legal">Legal</option>
+            <option value="playbook">Playbook</option>
+            <option value="other">Other</option>
+          </Select>
+        </div>
+        <div>
+          <label className="text-sm text-zinc-600">Status</label>
+          <Select value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+            <option value="experimental">Experimental</option>
+          </Select>
+        </div>
+        <div>
+          <label className="text-sm text-zinc-600">Region</label>
+          <Select value={region} onChange={(e) => setRegion(e.target.value)}>
+            <option value="">None</option>
+            <option value="NG">NG</option>
+            <option value="GLOBAL">GLOBAL</option>
+            <option value="KE">KE</option>
+            <option value="GH">GH</option>
+            <option value="ZA">ZA</option>
+          </Select>
+        </div>
+        <div>
+          <label className="text-sm text-zinc-600">Platform</label>
+          <Select value={platform} onChange={(e) => setPlatform(e.target.value)}>
+            <option value="">None</option>
+            <option value="YouTube">YouTube</option>
+            <option value="Cinema">Cinema</option>
+            <option value="VOD">VOD</option>
+            <option value="TV">TV</option>
+          </Select>
+        </div>
+        <div className="md:col-span-2">
+          <label className="text-sm text-zinc-600">Tags (comma-separated)</label>
+          <Input value={tags} onChange={(e) => setTags(e.target.value)} />
+        </div>
+        <div className="md:col-span-2 flex items-center gap-3">
+          <Button disabled={busy}>{busy ? "Saving…" : "Save Changes"}</Button>
+          <Button variant="secondary" type="button" onClick={onClose}>Cancel</Button>
+          {error && <span className="text-sm text-red-600">{error}</span>}
+        </div>
+      </form>
+    </Modal>
+  );
+}
+
 // ----------------------------- Docs Tab -----------------------------
 function DocsTab() {
   const [file, setFile] = useState<File | null>(null);
@@ -157,6 +305,9 @@ function DocsTab() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [docs, setDocs] = useState<AdminDoc[]>([]);
+  const [editingDoc, setEditingDoc] = useState<AdminDoc | null>(null);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [deletingDoc, setDeletingDoc] = useState<AdminDoc | null>(null);
 
   async function loadDocs() {
     try {
@@ -205,6 +356,30 @@ function DocsTab() {
     } finally {
       setBusy(false);
     }
+  }
+
+  async function handleDelete(doc: AdminDoc) {
+    if (!confirm(`Are you sure you want to delete "${doc.title}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      await backend.admin.deleteDoc({ id: doc.id });
+      await loadDocs();
+      setDeletingDoc(null);
+    } catch (e: any) {
+      console.error("Delete error:", e);
+      setError(e.message);
+    }
+  }
+
+  function handleEdit(doc: AdminDoc) {
+    setEditingDoc(doc);
+    setShowEditModal(true);
+  }
+
+  function handleEditSave() {
+    loadDocs();
   }
 
   return (
@@ -277,6 +452,7 @@ function DocsTab() {
                 <th className="py-2">Tags</th>
                 <th className="py-2">Status</th>
                 <th className="py-2">Updated</th>
+                <th className="py-2">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -294,13 +470,33 @@ function DocsTab() {
                       ))}
                     </div>
                   </td>
-                  <td className="py-2">{d.status}</td>
+                  <td className="py-2">
+                    <Tag>{d.status}</Tag>
+                  </td>
                   <td className="py-2">{new Date(d.updated_at).toLocaleString()}</td>
+                  <td className="py-2">
+                    <div className="flex gap-2">
+                      <Button
+                        variant="secondary"
+                        className="px-2 py-1 text-xs"
+                        onClick={() => handleEdit(d)}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        variant="danger"
+                        className="px-2 py-1 text-xs"
+                        onClick={() => handleDelete(d)}
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  </td>
                 </tr>
               ))}
               {docs.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="py-6 text-center text-zinc-500">
+                  <td colSpan={9} className="py-6 text-center text-zinc-500">
                     No docs yet. Upload above.
                   </td>
                 </tr>
@@ -309,6 +505,16 @@ function DocsTab() {
           </table>
         </div>
       </Card>
+
+      <EditDocModal
+        doc={editingDoc}
+        isOpen={showEditModal}
+        onClose={() => {
+          setShowEditModal(false);
+          setEditingDoc(null);
+        }}
+        onSave={handleEditSave}
+      />
     </div>
   );
 }
@@ -392,7 +598,7 @@ function SubmissionsTab() {
                 if (!ok) alert('Copy failed. Select the text and press Ctrl/Cmd+C.');
               }}>Copy ID</Button>
               <Button 
-                className="bg-white text-zinc-900 border" 
+                variant="secondary"
                 onClick={() => setSubmissionId(null)}
               >
                 Create Another
@@ -541,7 +747,7 @@ function ReportsTab() {
                 const ok = await safeCopyToClipboard(editorNotes || "");
                 if (!ok) alert('Copy failed. Select the text and press Ctrl/Cmd+C.');
               }}>Copy Notes</Button>
-              <Button className="bg-white text-zinc-900 border" onClick={() => setEditorNotes("")}>Clear</Button>
+              <Button variant="secondary" onClick={() => setEditorNotes("")}>Clear</Button>
             </div>
           </div>
         </Card>
