@@ -15,10 +15,10 @@ VALUES (
   'admin-001',
   'admin@example.com',
   'Admin User',
-  '$2b$10$rOKgQQjJlKjLKjLKjLKjLOeKjLKjLKjLKjLKjLKjLKjLKjLKjLKjL',
+  '$2b$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi',
   'admin',
   NOW()
-);
+) ON CONFLICT (id) DO NOTHING;
 
 CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_role ON users(role);

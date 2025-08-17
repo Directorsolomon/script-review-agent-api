@@ -1,4 +1,4 @@
-import { api } from "encore.dev/api";
+import { api, APIError } from "encore.dev/api";
 import { getAuthData } from "~encore/auth";
 
 export interface UserInfo {
@@ -12,7 +12,11 @@ export interface UserInfo {
 export const me = api<void, UserInfo>(
   { auth: true, expose: true, method: "GET", path: "/auth/me" },
   async () => {
-    const auth = getAuthData()!;
+    const auth = getAuthData();
+    if (!auth) {
+      throw APIError.unauthenticated("Not authenticated");
+    }
+    
     return {
       id: auth.userID,
       email: auth.email,

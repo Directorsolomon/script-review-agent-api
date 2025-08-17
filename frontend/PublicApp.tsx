@@ -116,10 +116,10 @@ function Hero() {
         </p>
         
         <div className="flex flex-col sm:flex-row gap-4 justify-center">
-          <Button size="lg" onClick={() => navigate('/#submit')}>
+          <Button size="lg" onClick={() => navigate('#submit')}>
             Submit Your Script
           </Button>
-          <Button variant="outline" size="lg" onClick={() => navigate('/#status')}>
+          <Button variant="outline" size="lg" onClick={() => navigate('#status')}>
             Check Status
           </Button>
         </div>

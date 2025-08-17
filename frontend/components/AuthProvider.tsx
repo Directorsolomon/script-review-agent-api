@@ -30,7 +30,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       const userInfo = await backend.auth.me();
       setUser(userInfo);
-    } catch {
+    } catch (error) {
+      // Silently fail - user is not authenticated
       setUser(null);
     } finally {
       setLoading(false);
@@ -38,19 +39,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function login(email: string, password: string) {
-    const response = await backend.auth.login({ email, password });
-    setUser(response.user);
+    try {
+      const response = await backend.auth.login({ email, password });
+      setUser(response.user);
+    } catch (error: any) {
+      throw new Error(error.message || "Login failed");
+    }
   }
 
   async function logout() {
-    await backend.auth.logout();
-    setUser(null);
+    try {
+      await backend.auth.logout();
+    } catch (error) {
+      // Ignore logout errors
+    } finally {
+      setUser(null);
+    }
   }
 
   async function register(email: string, password: string, name: string) {
-    await backend.auth.register({ email, password, name });
-    // Auto-login after registration
-    await login(email, password);
+    try {
+      await backend.auth.register({ email, password, name });
+      // Auto-login after registration
+      await login(email, password);
+    } catch (error: any) {
+      throw new Error(error.message || "Registration failed");
+    }
   }
 
   return (

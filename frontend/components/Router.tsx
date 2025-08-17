@@ -26,6 +26,15 @@ export function Router({ children }: { children: React.ReactNode }) {
   }, []);
 
   const navigate = (path: string) => {
+    if (path.startsWith('#')) {
+      // Handle hash navigation for same-page anchors
+      const element = document.querySelector(path);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth' });
+      }
+      return;
+    }
+    
     window.history.pushState({}, '', path);
     setCurrentPath(path);
   };
@@ -63,9 +72,12 @@ interface RouteProps {
 export function Route({ path, children, exact = false }: RouteProps) {
   const { currentPath } = useRouter();
   
+  // Remove query string and hash for matching
+  const cleanPath = currentPath.split('?')[0].split('#')[0];
+  
   const matches = exact 
-    ? currentPath === path || currentPath === path + '/'
-    : currentPath.startsWith(path);
+    ? cleanPath === path || cleanPath === path + '/'
+    : cleanPath.startsWith(path);
   
   return matches ? <>{children}</> : null;
 }

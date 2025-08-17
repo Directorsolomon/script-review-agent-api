@@ -75,10 +75,10 @@ export default function Navigation({ currentPath, navigate }: NavigationProps) {
               <>
                 {/* User is not logged in */}
                 <div className="flex items-center space-x-4">
-                  <Button variant="ghost" onClick={() => navigate('/#submit')}>
+                  <Button variant="ghost" onClick={() => navigate('#submit')}>
                     Submit Script
                   </Button>
-                  <Button variant="ghost" onClick={() => navigate('/#status')}>
+                  <Button variant="ghost" onClick={() => navigate('#status')}>
                     Check Status
                   </Button>
                   <Button variant="outline" size="sm" onClick={() => navigate('/login')}>

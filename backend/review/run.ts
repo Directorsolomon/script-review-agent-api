@@ -11,11 +11,11 @@ export interface RunReviewResponse {
   ok: boolean;
 }
 
-// Starts the review process for a submission with auth check
+// Starts the review process for a submission with optional auth check
 export const run = api<RunReviewRequest, RunReviewResponse>(
-  { auth: true, expose: true, method: "POST", path: "/review/run/:submissionId" },
+  { auth: false, expose: true, method: "POST", path: "/review/run/:submissionId" },
   async (req) => {
-    const auth = getAuthData()!;
+    const auth = getAuthData();
 
     // Validate input
     if (!req.submissionId || typeof req.submissionId !== 'string') {
@@ -30,8 +30,8 @@ export const run = api<RunReviewRequest, RunReviewResponse>(
       throw APIError.notFound("Submission not found");
     }
 
-    // Check if user has access to this submission
-    if (auth.role === 'user' && submission.writer_email !== auth.email) {
+    // Check if user has access to this submission (only if authenticated)
+    if (auth && auth.role === 'user' && submission.writer_email !== auth.email) {
       throw APIError.permissionDenied("Access denied");
     }
 
