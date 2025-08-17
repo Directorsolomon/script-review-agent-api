@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import backend from "~backend/client";
+import AdminApp from "./AdminApp";
 
 // ----------------------------- Utils -----------------------------
 function cx(...classes: (string | false | undefined | null)[]) {
@@ -71,6 +72,32 @@ function Select({ className, ...props }: React.SelectHTMLAttributes<HTMLSelectEl
 
 function Tag({ children }: { children: React.ReactNode }) {
   return <span className="px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-700 text-xs">{children}</span>;
+}
+
+// ----------------------------- Router -----------------------------
+function useRouter() {
+  const [currentPath, setCurrentPath] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.location.pathname + window.location.search;
+    }
+    return '/';
+  });
+
+  React.useEffect(() => {
+    const handlePopState = () => {
+      setCurrentPath(window.location.pathname + window.location.search);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const navigate = (path: string) => {
+    window.history.pushState({}, '', path);
+    setCurrentPath(path);
+  };
+
+  return { currentPath, navigate };
 }
 
 // ----------------------------- Home Hero -----------------------------
@@ -409,8 +436,8 @@ function FAQ() {
   );
 }
 
-// ----------------------------- Shell / Page -----------------------------
-export default function App() {
+// ----------------------------- Public App -----------------------------
+function PublicApp() {
   const [started, setStarted] = useState(false);
 
   return (
@@ -424,6 +451,7 @@ export default function App() {
           <div className="hidden sm:flex items-center gap-3">
             <a href="#status" className="px-4 py-1.5 rounded-2xl text-sm border hover:bg-zinc-50">Status</a>
             <a href="#submit" className="px-4 py-1.5 rounded-2xl text-sm border hover:bg-zinc-50">Submit</a>
+            <a href="/admin" className="px-4 py-1.5 rounded-2xl text-sm border hover:bg-zinc-50">Admin</a>
           </div>
         </div>
       </header>
@@ -450,4 +478,16 @@ export default function App() {
       </footer>
     </div>
   );
+}
+
+// ----------------------------- Main App with Routing -----------------------------
+export default function App() {
+  const { currentPath, navigate } = useRouter();
+
+  // Simple routing based on pathname
+  if (currentPath.startsWith('/admin')) {
+    return <AdminApp />;
+  }
+
+  return <PublicApp />;
 }
