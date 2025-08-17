@@ -1,6 +1,5 @@
 import { api } from "encore.dev/api";
 import { Bucket } from "encore.dev/storage/objects";
-import { security } from "~encore/clients";
 
 // Define buckets at module level
 const scriptsBucket = new Bucket("scripts");
@@ -23,6 +22,58 @@ export interface PresignResponse {
   s3Key: string;
 }
 
+const ALLOWED_TYPES = [
+  'application/pdf',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/msword',
+  'text/plain',
+  'application/x-fdx',
+];
+
+const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
+
+function validateFile(filename: string, contentType: string, size: number): { valid: boolean; error?: string } {
+  // Check file size
+  if (size > MAX_FILE_SIZE) {
+    return {
+      valid: false,
+      error: `File too large: ${Math.round(size / 1024 / 1024)}MB (max 20MB)`,
+    };
+  }
+
+  // Check file type
+  if (!ALLOWED_TYPES.includes(contentType)) {
+    return {
+      valid: false,
+      error: `Unsupported file type: ${contentType}`,
+    };
+  }
+
+  // Check filename for suspicious patterns
+  const suspiciousPatterns = [
+    /\.exe$/i,
+    /\.bat$/i,
+    /\.cmd$/i,
+    /\.scr$/i,
+    /\.js$/i,
+    /\.vbs$/i,
+    /\.php$/i,
+    /\.\./,
+    /[<>:"|?*]/,
+  ];
+
+  for (const pattern of suspiciousPatterns) {
+    if (pattern.test(filename)) {
+      return {
+        valid: false,
+        error: "Filename contains invalid characters or suspicious extension",
+      };
+    }
+  }
+
+  return { valid: true };
+}
+
 function genS3Key(prefix: string, filename: string): string {
   const id = crypto.randomUUID();
   const safe = filename.replace(/[^a-zA-Z0-9_.-]/g, '_');
@@ -34,11 +85,7 @@ export const presignScript = api<PresignScriptRequest, PresignResponse>(
   { expose: true, method: "POST", path: "/storage/presign/script" },
   async (req) => {
     // Validate file before creating presigned URL
-    const validation = await security.validateFile({
-      filename: req.filename,
-      contentType: req.contentType,
-      size: req.size,
-    });
+    const validation = validateFile(req.filename, req.contentType, req.size);
 
     if (!validation.valid) {
       throw new Error(validation.error || "File validation failed");
@@ -59,11 +106,7 @@ export const presignDoc = api<PresignDocRequest, PresignResponse>(
   { expose: true, method: "POST", path: "/storage/presign/doc" },
   async (req) => {
     // Validate file before creating presigned URL
-    const validation = await security.validateFile({
-      filename: req.filename,
-      contentType: req.contentType,
-      size: req.size,
-    });
+    const validation = validateFile(req.filename, req.contentType, req.size);
 
     if (!validation.valid) {
       throw new Error(validation.error || "File validation failed");
