@@ -6,16 +6,28 @@ interface LoginFormProps {
   showRegister?: boolean;
 }
 
-function Button({ children, className, variant = "primary", ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "primary" | "secondary" }) {
-  const baseClasses = "px-4 py-2 rounded-2xl border shadow-sm disabled:opacity-50";
+function Button({ children, className, variant = "primary", size = "md", ...props }: React.ButtonHTMLAttributes<HTMLButtonElement> & { 
+  variant?: "primary" | "secondary" | "outline" | "ghost"; 
+  size?: "sm" | "md" | "lg";
+}) {
+  const baseClasses = "inline-flex items-center justify-center font-medium rounded-xl transition-colors focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none";
+  
+  const sizeClasses = {
+    sm: "px-3 py-1.5 text-sm",
+    md: "px-4 py-2 text-sm",
+    lg: "px-6 py-3 text-base",
+  };
+  
   const variantClasses = {
-    primary: "border-zinc-200 bg-zinc-900 text-white hover:bg-zinc-800",
-    secondary: "border-zinc-300 bg-white text-zinc-900 hover:bg-zinc-50",
+    primary: "bg-zinc-900 text-white hover:bg-zinc-800 border border-zinc-900",
+    secondary: "bg-white text-zinc-900 hover:bg-zinc-50 border border-zinc-300",
+    outline: "bg-transparent text-zinc-900 hover:bg-zinc-50 border border-zinc-300",
+    ghost: "bg-transparent text-zinc-600 hover:text-zinc-900 hover:bg-zinc-100 border border-transparent",
   };
 
   return (
     <button
-      className={`${baseClasses} ${variantClasses[variant]} ${className || ""}`}
+      className={`${baseClasses} ${sizeClasses[size]} ${variantClasses[variant]} ${className || ""}`}
       {...props}
     >
       {children}
@@ -23,120 +35,191 @@ function Button({ children, className, variant = "primary", ...props }: React.Bu
   );
 }
 
-function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
+function Input({ error, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { error?: boolean }) {
   return (
     <input
       {...props}
-      className={`w-full rounded-xl border border-zinc-300 px-3 py-2 focus:outline-none focus:ring-2 focus:ring-zinc-900 ${props.className || ""}`}
+      className={`w-full rounded-xl border px-3 py-2 text-sm transition-colors focus:outline-none focus:ring-2 focus:ring-zinc-900 focus:ring-offset-1 placeholder:text-zinc-400 ${
+        error ? "border-red-300 focus:ring-red-500" : "border-zinc-300"
+      } ${props.className || ""}`}
     />
+  );
+}
+
+function LoadingSpinner({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
+  const sizeClasses = {
+    sm: "w-4 h-4",
+    md: "w-6 h-6",
+    lg: "w-8 h-8",
+  };
+
+  return (
+    <div className={`animate-spin rounded-full border-2 border-zinc-300 border-t-zinc-900 ${sizeClasses[size]}`} />
   );
 }
 
 export default function LoginForm({ onSuccess, showRegister = true }: LoginFormProps) {
   const [isLogin, setIsLogin] = useState(true);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [name, setName] = useState("");
+  const [formData, setFormData] = useState({
+    email: "",
+    password: "",
+    name: "",
+  });
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [errors, setErrors] = useState<Record<string, string>>({});
   const { login, register } = useAuth();
+
+  function validateForm() {
+    const newErrors: Record<string, string> = {};
+    
+    if (!formData.email.trim()) {
+      newErrors.email = "Email is required";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      newErrors.email = "Please enter a valid email address";
+    }
+    
+    if (!formData.password) {
+      newErrors.password = "Password is required";
+    } else if (!isLogin && formData.password.length < 8) {
+      newErrors.password = "Password must be at least 8 characters";
+    }
+    
+    if (!isLogin && !formData.name.trim()) {
+      newErrors.name = "Full name is required";
+    }
+    
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    setError(null);
+    
+    if (!validateForm()) return;
+    
     setLoading(true);
+    setErrors({});
 
     try {
       if (isLogin) {
-        await login(email, password);
+        await login(formData.email, formData.password);
       } else {
-        await register(email, password, name);
+        await register(formData.email, formData.password, formData.name);
       }
       onSuccess?.();
     } catch (e: any) {
-      setError(e.message || "Authentication failed");
+      setErrors({ submit: e.message || "Authentication failed" });
     } finally {
       setLoading(false);
     }
   }
 
+  function updateFormData(field: string, value: string) {
+    setFormData(prev => ({ ...prev, [field]: value }));
+    // Clear error when user starts typing
+    if (errors[field]) {
+      setErrors(prev => ({ ...prev, [field]: "" }));
+    }
+  }
+
   return (
-    <div className="max-w-md mx-auto">
+    <div className="w-full max-w-md">
       <div className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
-        <h2 className="text-xl font-semibold mb-4">
-          {isLogin ? "Sign In" : "Create Account"}
-        </h2>
+        <div className="text-center mb-6">
+          <h2 className="text-xl font-semibold text-zinc-900">
+            {isLogin ? "Welcome back" : "Create your account"}
+          </h2>
+          <p className="text-sm text-zinc-600 mt-1">
+            {isLogin ? "Sign in to access your dashboard" : "Join to start getting script feedback"}
+          </p>
+        </div>
         
         <form onSubmit={handleSubmit} className="space-y-4">
           {!isLogin && (
             <div>
-              <label htmlFor="name" className="block text-sm text-zinc-600 mb-1">
-                Full Name
+              <label htmlFor="name" className="block text-sm font-medium text-zinc-700 mb-1">
+                Full Name <span className="text-red-500">*</span>
               </label>
               <Input
                 id="name"
                 type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                required
+                value={formData.name}
+                onChange={(e) => updateFormData('name', e.target.value)}
                 placeholder="Enter your full name"
+                error={!!errors.name}
+                autoComplete="name"
               />
+              {errors.name && <p className="text-sm text-red-600 mt-1">{errors.name}</p>}
             </div>
           )}
           
           <div>
-            <label htmlFor="email" className="block text-sm text-zinc-600 mb-1">
-              Email
+            <label htmlFor="email" className="block text-sm font-medium text-zinc-700 mb-1">
+              Email Address <span className="text-red-500">*</span>
             </label>
             <Input
               id="email"
               type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
+              value={formData.email}
+              onChange={(e) => updateFormData('email', e.target.value)}
               placeholder="Enter your email"
+              error={!!errors.email}
+              autoComplete="email"
             />
+            {errors.email && <p className="text-sm text-red-600 mt-1">{errors.email}</p>}
           </div>
           
           <div>
-            <label htmlFor="password" className="block text-sm text-zinc-600 mb-1">
-              Password
+            <label htmlFor="password" className="block text-sm font-medium text-zinc-700 mb-1">
+              Password <span className="text-red-500">*</span>
             </label>
             <Input
               id="password"
               type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
+              value={formData.password}
+              onChange={(e) => updateFormData('password', e.target.value)}
               placeholder="Enter your password"
-              minLength={8}
+              error={!!errors.password}
+              autoComplete={isLogin ? "current-password" : "new-password"}
             />
+            {errors.password && <p className="text-sm text-red-600 mt-1">{errors.password}</p>}
             {!isLogin && (
               <p className="text-xs text-zinc-500 mt-1">
-                Must be at least 8 characters
+                Must be at least 8 characters long
               </p>
             )}
           </div>
           
-          {error && (
-            <div className="text-sm text-red-600 bg-red-50 p-3 rounded-xl">
-              {error}
+          {errors.submit && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-3">
+              <p className="text-sm text-red-700">{errors.submit}</p>
             </div>
           )}
           
           <Button type="submit" disabled={loading} className="w-full">
-            {loading ? "Please wait..." : (isLogin ? "Sign In" : "Create Account")}
+            {loading ? (
+              <>
+                <LoadingSpinner size="sm" />
+                <span className="ml-2">Please wait...</span>
+              </>
+            ) : (
+              isLogin ? "Sign In" : "Create Account"
+            )}
           </Button>
         </form>
         
         {showRegister && (
-          <div className="mt-4 text-center">
+          <div className="mt-6 text-center">
             <button
               type="button"
-              onClick={() => setIsLogin(!isLogin)}
-              className="text-sm text-zinc-600 hover:text-zinc-900"
+              onClick={() => {
+                setIsLogin(!isLogin);
+                setErrors({});
+                setFormData({ email: "", password: "", name: "" });
+              }}
+              className="text-sm text-zinc-600 hover:text-zinc-900 transition-colors"
             >
-              {isLogin ? "Need an account? Sign up" : "Already have an account? Sign in"}
+              {isLogin ? "Don't have an account? Sign up" : "Already have an account? Sign in"}
             </button>
           </div>
         )}
