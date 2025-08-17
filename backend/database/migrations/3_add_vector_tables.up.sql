@@ -9,7 +9,7 @@ BEGIN
   ) INTO vector_available;
   
   IF vector_available THEN
-    -- Create tables with vector columns
+    -- Create tables with vector columns (using 1536 dimensions to stay under ivfflat limit)
     CREATE TABLE IF NOT EXISTS admin_doc_chunks (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       doc_id TEXT REFERENCES docs(id) ON DELETE CASCADE,
@@ -18,7 +18,7 @@ BEGIN
       line_end INTEGER,
       text TEXT NOT NULL,
       priority_weight REAL DEFAULT 1.0,
-      embedding vector(3072),
+      embedding vector(1536),
       tsv tsvector
     );
 
@@ -29,7 +29,7 @@ BEGIN
       page_start INTEGER,
       page_end INTEGER,
       text TEXT NOT NULL,
-      embedding vector(3072),
+      embedding vector(1536),
       tsv tsvector
     );
   ELSE
@@ -76,8 +76,9 @@ BEGIN
   ) INTO vector_available;
   
   IF vector_available THEN
-    CREATE INDEX IF NOT EXISTS idx_doc_chunks_embed ON admin_doc_chunks USING ivfflat (embedding vector_l2_ops) WITH (lists=100);
-    CREATE INDEX IF NOT EXISTS idx_script_chunks_embed ON script_chunks USING ivfflat (embedding vector_l2_ops) WITH (lists=100);
+    -- Use HNSW index instead of ivfflat to avoid dimension limits
+    CREATE INDEX IF NOT EXISTS idx_doc_chunks_embed ON admin_doc_chunks USING hnsw (embedding vector_l2_ops);
+    CREATE INDEX IF NOT EXISTS idx_script_chunks_embed ON script_chunks USING hnsw (embedding vector_l2_ops);
   END IF;
 END $$;
 

@@ -58,7 +58,7 @@ async function generateBatch(texts: string[]): Promise<number[][]> {
   const results = await Promise.all(
     texts.map(async (text) => {
       const { embedding } = await embed({
-        model: openai.embedding("text-embedding-3-large"),
+        model: openai.embedding("text-embedding-ada-002"), // Use ada-002 for 1536 dimensions
         value: text,
       });
       return embedding;
