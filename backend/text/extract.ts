@@ -1,5 +1,6 @@
 import { api, APIError } from "encore.dev/api";
 import { Bucket } from "encore.dev/storage/objects";
+import { badRequest, payloadTooLarge } from "../lib/errors";
 
 const docsBucket = new Bucket("docs");
 const scriptsBucket = new Bucket("scripts");
@@ -11,10 +12,14 @@ export interface ExtractTextRequest {
 
 export interface ExtractTextResponse {
   text: string;
+  stats: {
+    chars: number;
+    estimatedPages: number;
+  };
 }
 
-// Maximum text length for processing (approximately 1 million characters)
-const MAX_TEXT_LENGTH = 1_000_000; // 1MB of text as hard cap
+// Absolute maximum to catch pathological cases only - not a hard business limit
+const ABS_MAX_CHARS = 5_000_000; // 5MB of text as safety net
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB
 
 // Extracts text from PDF/DOCX files stored in S3
@@ -42,7 +47,7 @@ export const extractText = api<ExtractTextRequest, ExtractTextResponse>(
     if (buffer.length > MAX_FILE_SIZE) {
       const fileSizeMB = Math.round(buffer.length / 1024 / 1024);
       const maxSizeMB = Math.round(MAX_FILE_SIZE / 1024 / 1024);
-      throw APIError.invalidArgument(`File too large: ${fileSizeMB}MB (maximum ${maxSizeMB}MB)`);
+      throw payloadTooLarge(`File too large: ${fileSizeMB}MB (maximum ${maxSizeMB}MB)`);
     }
     
     let extractedText: string;
@@ -60,25 +65,30 @@ export const extractText = api<ExtractTextRequest, ExtractTextResponse>(
       }
     } catch (error) {
       console.error("Text extraction failed:", error);
-      throw APIError.internal("Failed to extract text from file. Please ensure the file is not corrupted.");
-    }
-    
-    // Validate extracted text length - fail fast with clear error
-    if (extractedText.length > MAX_TEXT_LENGTH) {
-      const textSizeMB = Math.round(extractedText.length / 1024 / 1024 * 10) / 10;
-      const maxSizeMB = Math.round(MAX_TEXT_LENGTH / 1024 / 1024 * 10) / 10;
-      
-      const error = new Error(`Script too large (${textSizeMB}MB text). Please upload a smaller file or split into parts. Maximum allowed: ${maxSizeMB}MB.`);
-      (error as any).code = 'payload_too_large';
-      (error as any).httpStatus = 413;
-      throw error;
+      throw badRequest("Failed to extract text from file. Please ensure the file is not corrupted.");
     }
     
     if (extractedText.trim().length === 0) {
-      throw APIError.invalidArgument("No readable text could be extracted from the file. Please ensure the file contains text content.");
+      throw badRequest("No readable text could be extracted from the file. Please ensure the file contains text content.");
     }
     
-    return { text: extractedText };
+    // Only fail on truly pathological cases - not normal large scripts
+    if (extractedText.length > ABS_MAX_CHARS) {
+      const textSizeMB = Math.round(extractedText.length / 1024 / 1024 * 10) / 10;
+      throw payloadTooLarge(`Script extremely large (${textSizeMB}MB text). Please split into smaller parts.`);
+    }
+    
+    // Calculate stats
+    const chars = extractedText.length;
+    const estimatedPages = Math.ceil(chars / 250); // Rough estimate: 250 chars per page
+    
+    return { 
+      text: extractedText,
+      stats: {
+        chars,
+        estimatedPages,
+      }
+    };
   }
 );
 

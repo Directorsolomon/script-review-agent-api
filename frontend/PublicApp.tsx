@@ -163,7 +163,7 @@ function SubmissionForm() {
   
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
-  const [success, setSuccess] = useState<{ submissionId: string } | null>(null);
+  const [success, setSuccess] = useState<{ submissionId: string; stats?: any } | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   async function uploadToPresignedURL(url: string, file: File) {
@@ -262,13 +262,35 @@ function SubmissionForm() {
 
       // Start the review process
       try {
-        await backend.review.run({ submissionId: created.submissionId });
-      } catch (err) {
-        console.error("Failed to start review:", err);
-        // Don't fail the submission if review start fails - user can retry later
+        const reviewResult = await backend.review.run({ submissionId: created.submissionId });
+        setSuccess({ 
+          submissionId: created.submissionId, 
+          stats: reviewResult.message ? { message: reviewResult.message } : undefined 
+        });
+      } catch (reviewErr: any) {
+        console.error("Failed to start review:", reviewErr);
+        
+        // Handle specific review errors with better messaging
+        let reviewErrorMessage = "Review process failed to start";
+        
+        if (reviewErr.message?.includes("Script too large") || reviewErr.message?.includes("extremely large")) {
+          reviewErrorMessage = "Your script is very large. Please split it into smaller parts or reduce the file size.";
+        } else if (reviewErr.message?.includes("payload_too_large") || reviewErr.message?.includes("413")) {
+          reviewErrorMessage = "Script too large for processing. Please split into smaller files.";
+        } else if (reviewErr.message?.includes("Embedding failed") || reviewErr.message?.includes("chunks")) {
+          reviewErrorMessage = "Script processing encountered issues. You can retry the review from your dashboard.";
+        } else if (reviewErr.message?.includes("failed_precondition")) {
+          reviewErrorMessage = reviewErr.message.replace("failed_precondition: ", "");
+        } else if (reviewErr.message) {
+          reviewErrorMessage = reviewErr.message;
+        }
+        
+        // Still show success for submission, but note review issue
+        setSuccess({ 
+          submissionId: created.submissionId,
+          stats: { reviewError: reviewErrorMessage }
+        });
       }
-
-      setSuccess({ submissionId: created.submissionId });
       
       setFormData({
         file: null,
@@ -290,7 +312,7 @@ function SubmissionForm() {
     } catch (e: any) {
       console.error("Submission error:", e);
       
-      // Handle specific error types
+      // Handle specific error types with better messaging
       let errorMessage = "Failed to submit script";
       
       if (e.message?.includes("File too large") || e.message?.includes("maximum")) {
@@ -299,6 +321,8 @@ function SubmissionForm() {
         errorMessage = e.message;
       } else if (e.message?.includes("413") || e.message?.includes("Payload Too Large")) {
         errorMessage = "File too large for upload. Please reduce file size to under 15MB and try again.";
+      } else if (e.message?.includes("payload_too_large")) {
+        errorMessage = "Script too large for processing. Please split into smaller files.";
       } else if (e.message?.includes("invalid_argument")) {
         errorMessage = e.message.replace("invalid_argument: ", "");
       } else if (e.message) {
@@ -329,6 +353,23 @@ function SubmissionForm() {
           <p className="text-gray-600">
             Your script has been uploaded and the review process has started.
           </p>
+          
+          {success.stats?.reviewError && (
+            <div className="mt-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <p className="text-sm text-yellow-800">
+                <strong>Note:</strong> {success.stats.reviewError}
+              </p>
+              <p className="text-xs text-yellow-600 mt-1">
+                You can retry the review from your dashboard.
+              </p>
+            </div>
+          )}
+          
+          {success.stats?.message && !success.stats?.reviewError && (
+            <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <p className="text-sm text-blue-800">{success.stats.message}</p>
+            </div>
+          )}
         </div>
         
         <div className="bg-gray-50 rounded-lg p-6 mb-8 max-w-md mx-auto">
@@ -564,15 +605,35 @@ function StatusLookup() {
     
     setRetrying(true);
     try {
-      await backend.review.run({ submissionId: submissionId.trim() });
+      const result = await backend.review.run({ submissionId: submissionId.trim() });
       setError(null);
+      
+      if (result.message) {
+        alert(`Review restarted: ${result.message}`);
+      } else {
+        alert("Review restarted successfully!");
+      }
+      
       // Wait a moment then try to fetch the report again
       setTimeout(() => {
         fetchReport(new Event('submit') as any);
       }, 2000);
     } catch (e: any) {
       console.error("Failed to retry review:", e);
-      setError("Failed to restart review: " + e.message);
+      
+      let retryErrorMessage = "Failed to restart review";
+      
+      if (e.message?.includes("Script too large") || e.message?.includes("extremely large")) {
+        retryErrorMessage = "Your script is too large for processing. Please split it into smaller parts.";
+      } else if (e.message?.includes("payload_too_large")) {
+        retryErrorMessage = "Script too large for processing. Please split into smaller files.";
+      } else if (e.message?.includes("failed_precondition")) {
+        retryErrorMessage = e.message.replace("failed_precondition: ", "");
+      } else if (e.message) {
+        retryErrorMessage = e.message;
+      }
+      
+      setError(retryErrorMessage);
     } finally {
       setRetrying(false);
     }

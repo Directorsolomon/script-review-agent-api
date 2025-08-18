@@ -2,6 +2,7 @@ import { api } from "encore.dev/api";
 import { db } from "../database/db";
 import { retrieval, agents, embeddings } from "~encore/clients";
 import type { FinalReport, AgentReview } from "../types/types";
+import { failedPrecondition, badRequest } from "../lib/errors";
 
 export interface ProcessReviewRequest {
   submissionId: string;
@@ -9,6 +10,12 @@ export interface ProcessReviewRequest {
 
 export interface ProcessReviewResponse {
   ok: boolean;
+  stats?: {
+    chunksProcessed: number;
+    totalChunks: number;
+    chars: number;
+    estimatedPages: number;
+  };
 }
 
 // Default rubric weights for scoring
@@ -29,7 +36,7 @@ export const processReview = api<ProcessReviewRequest, ProcessReviewResponse>(
   async (req) => {
     // Validate input - only accept submission ID, no large payloads
     if (!req.submissionId || typeof req.submissionId !== 'string') {
-      throw new Error("Invalid submission ID");
+      throw badRequest("Invalid submission ID");
     }
 
     const submission = await db.queryRow`
@@ -39,11 +46,11 @@ export const processReview = api<ProcessReviewRequest, ProcessReviewResponse>(
     `;
 
     if (!submission) {
-      throw new Error("Submission not found");
+      throw badRequest("Submission not found");
     }
 
     if (!submission.file_s3_key) {
-      throw new Error("No script file found for submission");
+      throw badRequest("No script file found for submission");
     }
 
     // Update submission status to processing
@@ -60,7 +67,13 @@ export const processReview = api<ProcessReviewRequest, ProcessReviewResponse>(
         s3Key: submission.file_s3_key,
       });
 
-      console.log(`Processed ${embedResult.chunksProcessed} chunks for submission ${req.submissionId}`);
+      console.log(`Processed ${embedResult.chunksProcessed}/${embedResult.totalChunks} chunks for submission ${req.submissionId}`);
+
+      // If less than 50% of chunks processed successfully, fail the review
+      const successRate = embedResult.chunksProcessed / embedResult.totalChunks;
+      if (successRate < 0.5) {
+        throw failedPrecondition(`Insufficient chunks processed successfully (${Math.round(successRate * 100)}%). Cannot proceed with review.`);
+      }
 
       // Prepare submission metadata for agents - only metadata, no large content
       const submissionMetadata = {
@@ -208,23 +221,40 @@ export const processReview = api<ProcessReviewRequest, ProcessReviewResponse>(
         WHERE id = ${req.submissionId}
       `;
 
+      return { 
+        ok: true,
+        stats: {
+          chunksProcessed: embedResult.chunksProcessed,
+          totalChunks: embedResult.totalChunks,
+          chars: embedResult.stats.chars,
+          estimatedPages: embedResult.stats.estimatedPages,
+        }
+      };
+
     } catch (error) {
       console.error(`Failed to process review for submission ${req.submissionId}:`, error);
       
+      // Re-throw known error types without wrapping
+      if (error instanceof Error && (error as any).code) {
+        // Update submission status to failed
+        await db.exec`
+          UPDATE submissions 
+          SET status = 'failed' 
+          WHERE id = ${req.submissionId}
+        `;
+        throw error;
+      }
+      
       // Surface clear errors instead of generic "internal"
       let errorMessage = "Review processing failed";
-      let errorCode = "internal";
       
       if (error instanceof Error) {
-        if (error.message.includes('payload_too_large') || (error as any).code === 'payload_too_large') {
+        if (error.message.includes('payload_too_large')) {
           errorMessage = error.message;
-          errorCode = "failed_precondition";
-        } else if (error.message.includes('failed_precondition') || (error as any).code === 'failed_precondition') {
+        } else if (error.message.includes('failed_precondition')) {
           errorMessage = error.message;
-          errorCode = "failed_precondition";
         } else if (error.message.includes('embedding failed')) {
           errorMessage = `Script processing failed: ${error.message}`;
-          errorCode = "failed_precondition";
         } else if (error.message) {
           errorMessage = error.message;
         }
@@ -237,11 +267,7 @@ export const processReview = api<ProcessReviewRequest, ProcessReviewResponse>(
         WHERE id = ${req.submissionId}
       `;
       
-      const newError = new Error(errorMessage);
-      (newError as any).code = errorCode;
-      throw newError;
+      throw failedPrecondition(errorMessage);
     }
-
-    return { ok: true };
   }
 );
