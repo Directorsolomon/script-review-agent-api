@@ -2,6 +2,8 @@ import React, { useEffect, useState } from "react";
 import ValidationMessage from "./ValidationMessage";
 import Button from "./Button";
 import LoadingSpinner from "./LoadingSpinner";
+import SubmissionTable from "./SubmissionTable";
+import SubmissionStatusBadge from "./SubmissionStatusBadge";
 import backend from "~backend/client";
 
 interface Submission {
@@ -46,6 +48,7 @@ function EmptyState({ title, description, action }: {
 }) {
   return (
     <div className="text-center py-12">
+      <div className="text-gray-400 text-4xl mb-4">📄</div>
       <h3 className="text-lg font-semibold text-gray-900 mb-2">{title}</h3>
       <p className="text-gray-600 mb-6 max-w-md mx-auto">{description}</p>
       {action}
@@ -72,24 +75,58 @@ function Input({ error, ...props }: React.InputHTMLAttributes<HTMLInputElement> 
   );
 }
 
+function QuickStats({ submissions }: { submissions: Submission[] }) {
+  const stats = {
+    total: submissions.length,
+    completed: submissions.filter(s => s.status === 'completed').length,
+    processing: submissions.filter(s => s.status === 'processing').length,
+    pending: submissions.filter(s => s.status === 'queued').length,
+    failed: submissions.filter(s => s.status === 'failed').length,
+  };
+
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+      <div className="bg-gray-50 rounded-lg p-4 text-center">
+        <div className="text-2xl font-bold text-gray-900">{stats.total}</div>
+        <div className="text-sm text-gray-600">Total</div>
+      </div>
+      <div className="bg-green-50 rounded-lg p-4 text-center">
+        <div className="text-2xl font-bold text-green-900">{stats.completed}</div>
+        <div className="text-sm text-green-700">Completed</div>
+      </div>
+      <div className="bg-blue-50 rounded-lg p-4 text-center">
+        <div className="text-2xl font-bold text-blue-900">{stats.processing}</div>
+        <div className="text-sm text-blue-700">Processing</div>
+      </div>
+      <div className="bg-yellow-50 rounded-lg p-4 text-center">
+        <div className="text-2xl font-bold text-yellow-900">{stats.pending}</div>
+        <div className="text-sm text-yellow-700">Pending</div>
+      </div>
+      <div className="bg-red-50 rounded-lg p-4 text-center">
+        <div className="text-2xl font-bold text-red-900">{stats.failed}</div>
+        <div className="text-sm text-red-700">Failed</div>
+      </div>
+    </div>
+  );
+}
+
 export default function UserDashboard() {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [retryingId, setRetryingId] = useState<string | null>(null);
   const [emailFilter, setEmailFilter] = useState("");
-
-  useEffect(() => {
-    setLoading(false);
-  }, []);
+  const [searchPerformed, setSearchPerformed] = useState(false);
 
   async function loadSubmissions() {
     if (!emailFilter.trim()) {
       setSubmissions([]);
+      setSearchPerformed(false);
       return;
     }
 
     setLoading(true);
+    setSearchPerformed(true);
     try {
       setError(null);
       const response = await backend.submissions.listUserSubmissions({
@@ -110,40 +147,133 @@ export default function UserDashboard() {
       
       const reportWindow = window.open('', '_blank');
       if (reportWindow) {
+        const reportData = report.report_json || {};
+        
         reportWindow.document.write(`
+          <!DOCTYPE html>
           <html>
             <head>
               <title>Script Review Report</title>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1">
               <style>
-                body { font-family: system-ui, sans-serif; max-width: 800px; margin: 0 auto; padding: 40px 20px; line-height: 1.6; }
-                .score { font-size: 24px; font-weight: bold; color: #374151; margin-bottom: 30px; }
-                .section { margin: 30px 0; padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px; }
-                h1 { color: #111827; margin-bottom: 30px; }
-                h2 { color: #374151; margin-bottom: 15px; }
-                ul { padding-left: 20px; }
-                li { margin-bottom: 8px; color: #4b5563; }
+                body { 
+                  font-family: system-ui, -apple-system, sans-serif; 
+                  max-width: 800px; 
+                  margin: 0 auto; 
+                  padding: 40px 20px; 
+                  line-height: 1.6; 
+                  color: #374151;
+                }
+                .header { 
+                  text-align: center; 
+                  margin-bottom: 40px; 
+                  padding-bottom: 20px; 
+                  border-bottom: 2px solid #e5e7eb; 
+                }
+                .score { 
+                  font-size: 48px; 
+                  font-weight: bold; 
+                  color: #059669; 
+                  margin: 20px 0; 
+                }
+                .section { 
+                  margin: 30px 0; 
+                  padding: 24px; 
+                  border: 1px solid #e5e7eb; 
+                  border-radius: 12px; 
+                  background: #f9fafb;
+                }
+                h1 { 
+                  color: #111827; 
+                  margin-bottom: 10px; 
+                  font-size: 28px;
+                }
+                h2 { 
+                  color: #374151; 
+                  margin-bottom: 16px; 
+                  font-size: 20px;
+                  border-bottom: 1px solid #d1d5db;
+                  padding-bottom: 8px;
+                }
+                ul { 
+                  padding-left: 0; 
+                  list-style: none;
+                }
+                li { 
+                  margin-bottom: 12px; 
+                  color: #4b5563; 
+                  padding: 8px 0;
+                  border-bottom: 1px solid #f3f4f6;
+                }
+                li:last-child {
+                  border-bottom: none;
+                }
+                .priority-high { color: #dc2626; font-weight: 600; }
+                .priority-med { color: #d97706; font-weight: 500; }
+                .priority-low { color: #059669; font-weight: 500; }
+                .no-print { margin-top: 40px; text-align: center; }
+                @media print {
+                  .no-print { display: none; }
+                }
+                .markdown-content {
+                  white-space: pre-wrap;
+                  font-family: Georgia, serif;
+                  line-height: 1.8;
+                }
               </style>
             </head>
             <body>
-              <h1>Script Review Report</h1>
-              <div class="score">Overall Score: ${report.overall_score?.toFixed(1) || 'N/A'}/10</div>
-              <div class="section">
-                <h2>Strengths</h2>
-                <ul>
-                  ${(report.report_json?.highlights || []).map((h: string) => `<li>${h}</li>`).join('')}
-                </ul>
+              <div class="header">
+                <h1>Script Review Report</h1>
+                <div class="score">${report.overall_score?.toFixed(1) || 'N/A'}/10</div>
+                <p>Generated on ${new Date().toLocaleDateString()}</p>
               </div>
-              <div class="section">
-                <h2>Areas for Improvement</h2>
-                <ul>
-                  ${(report.report_json?.risks || []).map((r: string) => `<li>${r}</li>`).join('')}
-                </ul>
-              </div>
-              <div class="section">
-                <h2>Action Plan</h2>
-                <ul>
-                  ${(report.report_json?.action_plan || []).map((a: any) => `<li><strong>[${a.priority?.toUpperCase()}]</strong> ${a.description}</li>`).join('')}
-                </ul>
+              
+              ${reportData.report_markdown ? `
+                <div class="section">
+                  <div class="markdown-content">${reportData.report_markdown}</div>
+                </div>
+              ` : `
+                <div class="section">
+                  <h2>✨ Strengths</h2>
+                  <ul>
+                    ${(reportData.highlights || ['No specific strengths identified yet.']).map((h: string) => `<li>• ${h}</li>`).join('')}
+                  </ul>
+                </div>
+                
+                <div class="section">
+                  <h2>⚠️ Areas for Improvement</h2>
+                  <ul>
+                    ${(reportData.risks || ['No specific risks identified.']).map((r: string) => `<li>• ${r}</li>`).join('')}
+                  </ul>
+                </div>
+                
+                <div class="section">
+                  <h2>📋 Action Plan</h2>
+                  <ul>
+                    ${(reportData.action_plan || []).map((a: any) => `
+                      <li>
+                        <span class="priority-${a.priority || 'med'}">[${(a.priority || 'MED').toUpperCase()}]</span> 
+                        ${a.description}
+                      </li>
+                    `).join('')}
+                  </ul>
+                </div>
+                
+                ${reportData.buckets && reportData.buckets.length > 0 ? `
+                  <div class="section">
+                    <h2>📊 Detailed Scores</h2>
+                    <ul>
+                      ${reportData.buckets.map((b: any) => `<li><strong>${b.name}:</strong> ${b.score}/10</li>`).join('')}
+                    </ul>
+                  </div>
+                ` : ''}
+              `}
+              
+              <div class="no-print">
+                <button onclick="window.print()" style="background: #374151; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; margin-right: 12px;">Print Report</button>
+                <button onclick="window.close()" style="background: #6b7280; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer;">Close</button>
               </div>
             </body>
           </html>
@@ -159,35 +289,33 @@ export default function UserDashboard() {
   async function retryReview(submissionId: string) {
     setRetryingId(submissionId);
     try {
-      await backend.review.run({ submissionId });
-      alert("Review restarted successfully!");
+      const result = await backend.review.run({ submissionId });
+      alert(result.message || "Review restarted successfully!");
       await loadSubmissions();
     } catch (e: any) {
       console.error("Failed to restart review:", e);
-      alert("Failed to restart review: " + e.message);
+      
+      let errorMessage = "Failed to restart review";
+      if (e.message?.includes("Script too large") || e.message?.includes("extremely large")) {
+        errorMessage = "Your script is too large for processing. Please split it into smaller parts.";
+      } else if (e.message?.includes("payload_too_large")) {
+        errorMessage = "Script too large for processing. Please split into smaller files.";
+      } else if (e.message?.includes("failed_precondition")) {
+        errorMessage = e.message.replace("failed_precondition: ", "");
+      } else if (e.message) {
+        errorMessage = e.message;
+      }
+      
+      alert(errorMessage);
     } finally {
       setRetryingId(null);
     }
   }
 
-  function getStatusText(status: string): string {
-    switch (status) {
-      case "queued": return "Pending";
-      case "processing": return "In Review";
-      case "completed": return "Complete";
-      case "failed": return "Failed";
-      default: return status;
+  function handleKeyPress(e: React.KeyboardEvent) {
+    if (e.key === 'Enter') {
+      loadSubmissions();
     }
-  }
-
-  function formatDate(dateString: string): string {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
   }
 
   return (
@@ -198,8 +326,8 @@ export default function UserDashboard() {
       </div>
 
       <Card 
-        title="Script Submissions" 
-        description="Enter your email address to view your submissions"
+        title="My Script Submissions" 
+        description="Enter your email address to view your submissions and track their progress"
         actions={
           <Button onClick={() => window.location.href = "/#submit"} size="sm">
             Submit New Script
@@ -214,6 +342,7 @@ export default function UserDashboard() {
                 placeholder="Enter your email address"
                 value={emailFilter}
                 onChange={(e) => setEmailFilter(e.target.value)}
+                onKeyPress={handleKeyPress}
               />
             </div>
             <Button onClick={loadSubmissions} disabled={loading || !emailFilter.trim()}>
@@ -225,8 +354,12 @@ export default function UserDashboard() {
         {error && (
           <ValidationMessage type="error" message={error} className="mb-6" />
         )}
+
+        {submissions.length > 0 && (
+          <QuickStats submissions={submissions} />
+        )}
         
-        {!emailFilter.trim() ? (
+        {!searchPerformed ? (
           <EmptyState
             title="Enter your email to view submissions"
             description="Please enter the email address you used when submitting your scripts to view your submission history and reports."
@@ -242,71 +375,14 @@ export default function UserDashboard() {
             }
           />
         ) : (
-          <div className="space-y-4">
-            <div className="overflow-x-auto">
-              <table className="min-w-full">
-                <thead>
-                  <tr className="text-left text-sm font-medium text-gray-600 border-b border-gray-200">
-                    <th className="pb-3">Script</th>
-                    <th className="pb-3">Status</th>
-                    <th className="pb-3">Submitted</th>
-                    <th className="pb-3">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {submissions.map((submission) => (
-                    <tr key={submission.id} className="group hover:bg-gray-50">
-                      <td className="py-4">
-                        <div>
-                          <p className="font-medium text-gray-900">{submission.script_title}</p>
-                          <p className="text-sm text-gray-500 mt-1">
-                            {submission.format} • {submission.draft_version} • {submission.genre || 'No genre'}
-                          </p>
-                        </div>
-                      </td>
-                      <td className="py-4">
-                        <span className="text-sm text-gray-600">
-                          {getStatusText(submission.status)}
-                        </span>
-                      </td>
-                      <td className="py-4 text-sm text-gray-600">
-                        {formatDate(submission.created_at)}
-                      </td>
-                      <td className="py-4">
-                        <div className="flex items-center gap-2">
-                          {submission.status === "completed" && (
-                            <Button
-                              variant="primary"
-                              size="sm"
-                              onClick={() => viewReport(submission.id)}
-                            >
-                              View Report
-                            </Button>
-                          )}
-                          {submission.status === "failed" && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => retryReview(submission.id)}
-                              disabled={retryingId === submission.id}
-                            >
-                              {retryingId === submission.id ? <LoadingSpinner size="sm" /> : "Retry"}
-                            </Button>
-                          )}
-                          {submission.status === "processing" && (
-                            <span className="text-sm text-gray-500">Processing...</span>
-                          )}
-                          {submission.status === "queued" && (
-                            <span className="text-sm text-gray-500">In queue</span>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+          <SubmissionTable
+            submissions={submissions}
+            loading={loading}
+            showActions={true}
+            onViewReport={viewReport}
+            onRetryReview={retryReview}
+            retryingId={retryingId}
+          />
         )}
       </Card>
     </div>

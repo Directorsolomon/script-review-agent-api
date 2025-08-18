@@ -5,6 +5,9 @@ import ConfirmDialog from "./components/ConfirmDialog";
 import ValidationMessage from "./components/ValidationMessage";
 import Button from "./components/Button";
 import LoadingSpinner from "./components/LoadingSpinner";
+import SubmissionTable from "./components/SubmissionTable";
+import SubmissionFilters from "./components/SubmissionFilters";
+import StatsCards from "./components/StatsCards";
 import backend from "~backend/client";
 
 // ----------------------------- Utilities -----------------------------
@@ -744,26 +747,41 @@ function DocsTab() {
 // ----------------------------- Submissions Tab -----------------------------
 function SubmissionsTab() {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [stats, setStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [retryingId, setRetryingId] = useState<string | null>(null);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<Submission | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [filters, setFilters] = useState({
     status: "",
     writer_email: "",
     region: "",
     platform: "",
+    format: "",
+    from_date: "",
+    to_date: "",
   });
 
   async function loadSubmissions() {
     try {
       setError(null);
-      const response = await backend.admin.listAdminSubmissions({
-        status: filters.status || undefined,
-        writer_email: filters.writer_email || undefined,
-        region: filters.region || undefined,
-        platform: filters.platform || undefined,
-        limit: 100,
-      });
-      setSubmissions(response.items);
+      const [submissionsResponse, statsResponse] = await Promise.all([
+        backend.admin.listAdminSubmissions({
+          status: filters.status || undefined,
+          writer_email: filters.writer_email || undefined,
+          region: filters.region || undefined,
+          platform: filters.platform || undefined,
+          from_date: filters.from_date || undefined,
+          to_date: filters.to_date || undefined,
+          limit: 100,
+        }),
+        backend.submissions.getStats()
+      ]);
+      
+      setSubmissions(submissionsResponse.items);
+      setStats(statsResponse.stats);
     } catch (e: any) {
       console.error("Failed to load submissions:", e);
       setError(e.message || "Failed to load submissions");
@@ -780,34 +798,220 @@ function SubmissionsTab() {
     setFilters(prev => ({ ...prev, [field]: value }));
   }
 
-  function getStatusText(status: string): string {
-    switch (status) {
-      case "queued": return "Pending";
-      case "processing": return "In Review";
-      case "completed": return "Complete";
-      case "failed": return "Failed";
-      default: return status;
-    }
-  }
-
-  function getStatusColor(status: string): string {
-    switch (status) {
-      case "queued": return "bg-yellow-100 text-yellow-800";
-      case "processing": return "bg-blue-100 text-blue-800";
-      case "completed": return "bg-green-100 text-green-800";
-      case "failed": return "bg-red-100 text-red-800";
-      default: return "bg-gray-100 text-gray-800";
-    }
-  }
-
-  function formatDate(dateString: string): string {
-    return new Date(dateString).toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+  function clearFilters() {
+    setFilters({
+      status: "",
+      writer_email: "",
+      region: "",
+      platform: "",
+      format: "",
+      from_date: "",
+      to_date: "",
     });
+  }
+
+  async function viewReport(submissionId: string) {
+    try {
+      const report = await backend.review.getReport({ submissionId });
+      
+      const reportWindow = window.open('', '_blank');
+      if (reportWindow) {
+        const reportData = report.report_json || {};
+        
+        reportWindow.document.write(`
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <title>Script Review Report - Admin View</title>
+              <meta charset="utf-8">
+              <meta name="viewport" content="width=device-width, initial-scale=1">
+              <style>
+                body { 
+                  font-family: system-ui, -apple-system, sans-serif; 
+                  max-width: 900px; 
+                  margin: 0 auto; 
+                  padding: 40px 20px; 
+                  line-height: 1.6; 
+                  color: #374151;
+                }
+                .header { 
+                  text-align: center; 
+                  margin-bottom: 40px; 
+                  padding-bottom: 20px; 
+                  border-bottom: 2px solid #e5e7eb; 
+                }
+                .score { 
+                  font-size: 48px; 
+                  font-weight: bold; 
+                  color: #059669; 
+                  margin: 20px 0; 
+                }
+                .section { 
+                  margin: 30px 0; 
+                  padding: 24px; 
+                  border: 1px solid #e5e7eb; 
+                  border-radius: 12px; 
+                  background: #f9fafb;
+                }
+                h1 { 
+                  color: #111827; 
+                  margin-bottom: 10px; 
+                  font-size: 28px;
+                }
+                h2 { 
+                  color: #374151; 
+                  margin-bottom: 16px; 
+                  font-size: 20px;
+                  border-bottom: 1px solid #d1d5db;
+                  padding-bottom: 8px;
+                }
+                .admin-info {
+                  background: #eff6ff;
+                  border: 1px solid #bfdbfe;
+                  padding: 16px;
+                  border-radius: 8px;
+                  margin-bottom: 20px;
+                }
+                .admin-info h3 {
+                  margin: 0 0 8px 0;
+                  color: #1e40af;
+                }
+                ul { 
+                  padding-left: 0; 
+                  list-style: none;
+                }
+                li { 
+                  margin-bottom: 12px; 
+                  color: #4b5563; 
+                  padding: 8px 0;
+                  border-bottom: 1px solid #f3f4f6;
+                }
+                li:last-child {
+                  border-bottom: none;
+                }
+                .priority-high { color: #dc2626; font-weight: 600; }
+                .priority-med { color: #d97706; font-weight: 500; }
+                .priority-low { color: #059669; font-weight: 500; }
+                .no-print { margin-top: 40px; text-align: center; }
+                @media print {
+                  .no-print { display: none; }
+                }
+                .markdown-content {
+                  white-space: pre-wrap;
+                  font-family: Georgia, serif;
+                  line-height: 1.8;
+                }
+              </style>
+            </head>
+            <body>
+              <div class="admin-info">
+                <h3>Admin View</h3>
+                <p><strong>Submission ID:</strong> ${submissionId}</p>
+                <p><strong>Generated:</strong> ${new Date().toLocaleString()}</p>
+              </div>
+              
+              <div class="header">
+                <h1>Script Review Report</h1>
+                <div class="score">${report.overall_score?.toFixed(1) || 'N/A'}/10</div>
+              </div>
+              
+              ${reportData.report_markdown ? `
+                <div class="section">
+                  <div class="markdown-content">${reportData.report_markdown}</div>
+                </div>
+              ` : `
+                <div class="section">
+                  <h2>✨ Strengths</h2>
+                  <ul>
+                    ${(reportData.highlights || ['No specific strengths identified yet.']).map((h: string) => `<li>• ${h}</li>`).join('')}
+                  </ul>
+                </div>
+                
+                <div class="section">
+                  <h2>⚠️ Areas for Improvement</h2>
+                  <ul>
+                    ${(reportData.risks || ['No specific risks identified.']).map((r: string) => `<li>• ${r}</li>`).join('')}
+                  </ul>
+                </div>
+                
+                <div class="section">
+                  <h2>📋 Action Plan</h2>
+                  <ul>
+                    ${(reportData.action_plan || []).map((a: any) => `
+                      <li>
+                        <span class="priority-${a.priority || 'med'}">[${(a.priority || 'MED').toUpperCase()}]</span> 
+                        ${a.description}
+                      </li>
+                    `).join('')}
+                  </ul>
+                </div>
+                
+                ${reportData.buckets && reportData.buckets.length > 0 ? `
+                  <div class="section">
+                    <h2>📊 Detailed Scores</h2>
+                    <ul>
+                      ${reportData.buckets.map((b: any) => `<li><strong>${b.name}:</strong> ${b.score}/10</li>`).join('')}
+                    </ul>
+                  </div>
+                ` : ''}
+              `}
+              
+              <div class="no-print">
+                <button onclick="window.print()" style="background: #374151; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer; margin-right: 12px;">Print Report</button>
+                <button onclick="window.close()" style="background: #6b7280; color: white; border: none; padding: 12px 24px; border-radius: 6px; cursor: pointer;">Close</button>
+              </div>
+            </body>
+          </html>
+        `);
+        reportWindow.document.close();
+      }
+    } catch (e: any) {
+      console.error("Failed to load report:", e);
+      alert("Report not ready yet or failed to load. Please try again later.");
+    }
+  }
+
+  async function retryReview(submissionId: string) {
+    setRetryingId(submissionId);
+    try {
+      const result = await backend.review.run({ submissionId });
+      setSuccessMessage(result.message || "Review restarted successfully!");
+      await loadSubmissions();
+    } catch (e: any) {
+      console.error("Failed to restart review:", e);
+      setError("Failed to restart review: " + e.message);
+    } finally {
+      setRetryingId(null);
+    }
+  }
+
+  async function updateStatus(submissionId: string, status: string) {
+    setUpdatingId(submissionId);
+    try {
+      await backend.submissions.updateStatus({ 
+        id: submissionId, 
+        status: status as any 
+      });
+      setSuccessMessage("Status updated successfully!");
+      await loadSubmissions();
+    } catch (e: any) {
+      console.error("Failed to update status:", e);
+      setError("Failed to update status: " + e.message);
+    } finally {
+      setUpdatingId(null);
+    }
+  }
+
+  async function deleteSubmission(submission: Submission) {
+    try {
+      await backend.submissions.deleteSubmission({ id: submission.id });
+      setSuccessMessage("Submission deleted successfully!");
+      setConfirmDelete(null);
+      await loadSubmissions();
+    } catch (e: any) {
+      console.error("Failed to delete submission:", e);
+      setError("Failed to delete submission: " + e.message);
+    }
   }
 
   if (loading) {
@@ -820,136 +1024,66 @@ function SubmissionsTab() {
   }
 
   return (
-    <Card 
-      title="All Submissions" 
-      description={`${submissions.length} total submissions`}
-    >
-      {error && (
-        <ValidationMessage type="error" message={error} className="mb-6" />
+    <div className="space-y-8">
+      {successMessage && (
+        <SuccessMessage 
+          message={successMessage} 
+          onClose={() => setSuccessMessage(null)} 
+        />
       )}
 
-      {/* Filters */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-          <Select
-            value={filters.status}
-            onChange={(e) => updateFilter('status', e.target.value)}
-          >
-            <option value="">All Statuses</option>
-            <option value="queued">Pending</option>
-            <option value="processing">In Review</option>
-            <option value="completed">Complete</option>
-            <option value="failed">Failed</option>
-          </Select>
-        </div>
+      {stats && <StatsCards stats={stats} />}
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Writer Email</label>
-          <Input
-            value={filters.writer_email}
-            onChange={(e) => updateFilter('writer_email', e.target.value)}
-            placeholder="Search by email..."
-          />
-        </div>
+      <SubmissionFilters
+        filters={filters}
+        onFilterChange={updateFilter}
+        onClearFilters={clearFilters}
+      />
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Region</label>
-          <Select
-            value={filters.region}
-            onChange={(e) => updateFilter('region', e.target.value)}
-          >
-            <option value="">All Regions</option>
-            <option value="NG">Nigeria</option>
-            <option value="KE">Kenya</option>
-            <option value="GH">Ghana</option>
-            <option value="ZA">South Africa</option>
-            <option value="GLOBAL">Global</option>
-          </Select>
-        </div>
+      <Card 
+        title="All Submissions" 
+        description={`${submissions.length} submissions found`}
+      >
+        {error && (
+          <ValidationMessage type="error" message={error} className="mb-6" />
+        )}
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Platform</label>
-          <Select
-            value={filters.platform}
-            onChange={(e) => updateFilter('platform', e.target.value)}
-          >
-            <option value="">All Platforms</option>
-            <option value="YouTube">YouTube</option>
-            <option value="Cinema">Cinema</option>
-            <option value="VOD">VOD</option>
-            <option value="TV">TV</option>
-          </Select>
-        </div>
-      </div>
-      
-      <div className="overflow-x-auto">
-        <table className="min-w-full text-sm">
-          <thead>
-            <tr className="text-left text-gray-600 border-b border-gray-200">
-              <th className="py-3 font-medium">Script</th>
-              <th className="py-3 font-medium">Writer</th>
-              <th className="py-3 font-medium">Status</th>
-              <th className="py-3 font-medium">Format</th>
-              <th className="py-3 font-medium">Region</th>
-              <th className="py-3 font-medium">Submitted</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {submissions.map((submission) => (
-              <tr key={submission.id} className="hover:bg-gray-50">
-                <td className="py-3">
-                  <div>
-                    <p className="font-medium text-gray-900">{submission.script_title}</p>
-                    <p className="text-xs text-gray-500">{submission.genre || 'No genre'}</p>
-                  </div>
-                </td>
-                <td className="py-3">
-                  <div>
-                    <p className="text-gray-900">{submission.writer_name}</p>
-                    <p className="text-xs text-gray-500">{submission.writer_email}</p>
-                  </div>
-                </td>
-                <td className="py-3">
-                  <span className={cx(
-                    "inline-flex items-center px-2 py-1 rounded-full text-xs font-medium",
-                    getStatusColor(submission.status)
-                  )}>
-                    {getStatusText(submission.status)}
-                  </span>
-                </td>
-                <td className="py-3">
-                  <span className="text-gray-600">
-                    {submission.format} • {submission.draft_version}
-                  </span>
-                </td>
-                <td className="py-3">{submission.region || "—"}</td>
-                <td className="py-3 text-gray-600">
-                  {formatDate(submission.created_at)}
-                </td>
-              </tr>
-            ))}
-            {submissions.length === 0 && (
-              <tr>
-                <td colSpan={6} className="py-12 text-center text-gray-500">
-                  No submissions found matching the current filters.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-    </Card>
+        <SubmissionTable
+          submissions={submissions}
+          loading={loading}
+          showActions={true}
+          onViewReport={viewReport}
+          onRetryReview={retryReview}
+          onUpdateStatus={updateStatus}
+          onDeleteSubmission={(id) => {
+            const submission = submissions.find(s => s.id === id);
+            if (submission) setConfirmDelete(submission);
+          }}
+          retryingId={retryingId}
+          updatingId={updatingId}
+        />
+      </Card>
+
+      <ConfirmDialog
+        isOpen={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={() => confirmDelete && deleteSubmission(confirmDelete)}
+        title="Delete Submission"
+        message={`Are you sure you want to delete the submission "${confirmDelete?.script_title}" by ${confirmDelete?.writer_name}? This action cannot be undone and will remove all associated data including reports and chunks.`}
+        confirmText="Delete"
+        variant="danger"
+      />
+    </div>
   );
 }
 
 // ----------------------------- Admin Tabs -----------------------------
 function AdminTabs() {
-  const [activeTab, setActiveTab] = useState('docs');
+  const [activeTab, setActiveTab] = useState('submissions');
 
   const tabs = [
-    { id: 'docs', label: 'Documentation', component: DocsTab },
     { id: 'submissions', label: 'Submissions', component: SubmissionsTab },
+    { id: 'docs', label: 'Documentation', component: DocsTab },
   ];
 
   return (
@@ -998,7 +1132,7 @@ export default function AdminApp() {
       <main className="max-w-7xl mx-auto px-6 py-12">
         <div className="mb-12">
           <h1 className="text-2xl font-bold text-gray-900 mb-2">Admin Panel</h1>
-          <p className="text-gray-600">Manage documentation and review submissions</p>
+          <p className="text-gray-600">Manage submissions, documentation, and review processes</p>
         </div>
         <AdminTabs />
       </main>
