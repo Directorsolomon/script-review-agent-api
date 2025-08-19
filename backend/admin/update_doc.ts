@@ -30,64 +30,80 @@ export const updateDoc = api<UpdateDocRequest, UpdateDocResponse>(
       throw APIError.notFound("Document not found");
     }
 
-    // Build update query dynamically based on provided fields
-    const updates: string[] = [];
-    const params: any[] = [];
-    let paramIndex = 1;
+    // Use template literals for safer, more maintainable updates
+    const now = new Date().toISOString();
 
-    if (req.title !== undefined) {
-      updates.push(`title = $${paramIndex++}`);
-      params.push(req.title);
+    // Handle common update patterns with template literals
+    if (req.title !== undefined && req.version !== undefined && req.doc_type !== undefined &&
+        req.region !== undefined && req.platform !== undefined && req.tags !== undefined && req.status !== undefined) {
+      // All fields provided - use template literal
+      await db.exec`
+        UPDATE docs
+        SET title = ${req.title}, version = ${req.version}, doc_type = ${req.doc_type},
+            region = ${req.region}, platform = ${req.platform}, tags = ${req.tags},
+            status = ${req.status}, updated_at = ${now}
+        WHERE id = ${req.id}
+      `;
+    } else {
+      // Partial updates - keep the flexible parameterized approach for complex cases
+      const updates: string[] = [];
+      const params: any[] = [];
+      let paramIndex = 1;
+
+      if (req.title !== undefined) {
+        updates.push(`title = $${paramIndex++}`);
+        params.push(req.title);
+      }
+
+      if (req.version !== undefined) {
+        updates.push(`version = $${paramIndex++}`);
+        params.push(req.version);
+      }
+
+      if (req.doc_type !== undefined) {
+        updates.push(`doc_type = $${paramIndex++}`);
+        params.push(req.doc_type);
+      }
+
+      if (req.region !== undefined) {
+        updates.push(`region = $${paramIndex++}`);
+        params.push(req.region);
+      }
+
+      if (req.platform !== undefined) {
+        updates.push(`platform = $${paramIndex++}`);
+        params.push(req.platform);
+      }
+
+      if (req.tags !== undefined) {
+        updates.push(`tags = $${paramIndex++}`);
+        params.push(req.tags);
+      }
+
+      if (req.status !== undefined) {
+        updates.push(`status = $${paramIndex++}`);
+        params.push(req.status);
+      }
+
+      if (updates.length === 0) {
+        return { ok: true }; // No updates to make
+      }
+
+      // Always update the updated_at timestamp
+      updates.push(`updated_at = $${paramIndex++}`);
+      params.push(now);
+
+      // Add the ID for the WHERE clause
+      params.push(req.id);
+
+      const query = `
+        UPDATE docs
+        SET ${updates.join(', ')}
+        WHERE id = $${paramIndex}
+      `;
+
+      await db.rawExec(query, params);
     }
-
-    if (req.version !== undefined) {
-      updates.push(`version = $${paramIndex++}`);
-      params.push(req.version);
-    }
-
-    if (req.doc_type !== undefined) {
-      updates.push(`doc_type = $${paramIndex++}`);
-      params.push(req.doc_type);
-    }
-
-    if (req.region !== undefined) {
-      updates.push(`region = $${paramIndex++}`);
-      params.push(req.region);
-    }
-
-    if (req.platform !== undefined) {
-      updates.push(`platform = $${paramIndex++}`);
-      params.push(req.platform);
-    }
-
-    if (req.tags !== undefined) {
-      updates.push(`tags = $${paramIndex++}`);
-      params.push(req.tags);
-    }
-
-    if (req.status !== undefined) {
-      updates.push(`status = $${paramIndex++}`);
-      params.push(req.status);
-    }
-
-    if (updates.length === 0) {
-      return { ok: true }; // No updates to make
-    }
-
-    // Always update the updated_at timestamp
-    updates.push(`updated_at = $${paramIndex++}`);
-    params.push(new Date().toISOString());
-
-    // Add the ID for the WHERE clause
-    params.push(req.id);
-
-    const query = `
-      UPDATE docs 
-      SET ${updates.join(', ')}
-      WHERE id = $${paramIndex}
-    `;
-
-    await db.rawExec(query, params);
 
     return { ok: true };
   }

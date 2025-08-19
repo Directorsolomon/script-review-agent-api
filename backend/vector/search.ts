@@ -1,6 +1,7 @@
 import { api } from "encore.dev/api";
 import { db } from "../database/db";
 import { embeddings } from "~encore/clients";
+import { searchDocsBM25, searchScriptBM25 } from "./bm25";
 
 export interface SearchFilters {
   doc_type?: string;
@@ -178,83 +179,50 @@ export const searchScript = api<SearchScriptRequest, SearchScriptResponse>(
   }
 );
 
-// Fallback text search for documents
+// Fallback text search for documents - uses BM25 API to avoid code duplication
 async function fallbackTextSearchDocs(req: SearchDocsRequest): Promise<SearchDocsResponse> {
   const k = req.k || 12;
-  
-  // Build WHERE conditions for text search
-  const conditions: string[] = [];
-  const params: any[] = [req.query];
-  
-  if (req.filters.doc_type) {
-    params.push(req.filters.doc_type);
-    conditions.push(`d.doc_type = $${params.length}`);
-  }
-  
-  if (req.filters.region) {
-    params.push(req.filters.region);
-    conditions.push(`(d.region = $${params.length} OR d.region IS NULL)`);
-  }
-  
-  if (req.filters.platform) {
-    params.push(req.filters.platform);
-    conditions.push(`(d.platform = $${params.length} OR d.platform IS NULL)`);
-  }
 
-  const whereClause = conditions.length > 0 ? `AND ${conditions.join(' AND ')}` : '';
+  // Call the BM25 search function directly
+  const bm25Response = await searchDocsBM25({
+    keyword: req.query,
+    filters: {
+      doc_type: req.filters.doc_type,
+      region: req.filters.region,
+      platform: req.filters.platform,
+    },
+    k,
+  });
 
-  const query = `
-    SELECT c.id, c.doc_id, c.section, c.line_start, c.line_end, c.text,
-           ts_rank_cd(c.tsv, plainto_tsquery($1)) AS score
-    FROM admin_doc_chunks c 
-    JOIN docs d ON d.id = c.doc_id
-    WHERE c.tsv @@ plainto_tsquery($1) ${whereClause}
-    ORDER BY score DESC
-    LIMIT $${params.length + 1}
-  `;
-  
-  params.push(k);
-  const results = await db.rawQueryAll(query, params);
-
+  // Convert BM25 results to SearchResult format (rank -> score)
   return {
-    results: results.map(r => ({
+    results: bm25Response.results.map(r => ({
       id: r.id,
       text: r.text,
-      score: r.score,
-      metadata: {
-        doc_id: r.doc_id,
-        section: r.section,
-        line_start: r.line_start,
-        line_end: r.line_end,
-      },
+      score: r.rank, // BM25 uses 'rank', vector search uses 'score'
+      metadata: r.metadata,
     })),
   };
 }
 
-// Fallback text search for scripts
+// Fallback text search for scripts - uses BM25 API to avoid code duplication
 async function fallbackTextSearchScript(req: SearchScriptRequest): Promise<SearchScriptResponse> {
   const k = req.k || 8;
 
-  const results = await db.rawQueryAll(`
-    SELECT id, submission_id, scene_index, page_start, page_end, text,
-           ts_rank_cd(tsv, plainto_tsquery($1)) AS score
-    FROM script_chunks 
-    WHERE submission_id = $2 AND tsv @@ plainto_tsquery($1)
-    ORDER BY score DESC
-    LIMIT $3
-  `, [req.query, req.submissionId, k]);
+  // Call the BM25 search function directly
+  const bm25Response = await searchScriptBM25({
+    keyword: req.query,
+    submissionId: req.submissionId,
+    k,
+  });
 
+  // Convert BM25 results to SearchResult format (rank -> score)
   return {
-    results: results.map(r => ({
+    results: bm25Response.results.map(r => ({
       id: r.id,
       text: r.text,
-      score: r.score,
-      metadata: {
-        submission_id: r.submission_id,
-        scene_index: r.scene_index,
-        page_start: r.page_start,
-        page_end: r.page_end,
-      },
+      score: r.rank, // BM25 uses 'rank', vector search uses 'score'
+      metadata: r.metadata,
     })),
   };
 }

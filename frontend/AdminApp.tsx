@@ -8,7 +8,14 @@ import LoadingSpinner from "./components/LoadingSpinner";
 import SubmissionTable from "./components/SubmissionTable";
 import SubmissionFilters from "./components/SubmissionFilters";
 import StatsCards from "./components/StatsCards";
+import Input from "./components/primitives/Input";
+import Card from "./components/primitives/Card";
 import backend from "~backend/client";
+
+// Import proper types
+type Region = 'NG' | 'KE' | 'GH' | 'ZA' | 'GLOBAL';
+type Platform = 'YouTube' | 'Cinema' | 'VOD' | 'TV';
+type DocType = 'rubric' | 'style' | 'platform' | 'legal' | 'playbook' | 'other';
 
 // ----------------------------- Utilities -----------------------------
 async function uploadToPresignedURL(url: string, file: File) {
@@ -26,20 +33,6 @@ function cx(...classes: (string | false | undefined | null)[]) {
 }
 
 // ----------------------------- UI Primitives -----------------------------
-function Input({ error, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { error?: boolean }) {
-  return (
-    <input
-      {...props}
-      className={cx(
-        "w-full rounded-lg border px-3 py-2 text-sm transition-colors",
-        "focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-1",
-        "placeholder:text-gray-400",
-        error ? "border-red-300 focus:ring-red-500" : "border-gray-200",
-        props.className
-      )}
-    />
-  );
-}
 
 function Select({ error, className, ...props }: React.SelectHTMLAttributes<HTMLSelectElement> & { error?: boolean }) {
   return (
@@ -55,25 +48,7 @@ function Select({ error, className, ...props }: React.SelectHTMLAttributes<HTMLS
   );
 }
 
-function Card({ title, description, children, actions }: { 
-  title: string; 
-  description?: string; 
-  children: React.ReactNode; 
-  actions?: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-lg border border-gray-200 bg-white">
-      <div className="flex items-start justify-between p-8 border-b border-gray-100">
-        <div className="flex-1">
-          <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
-          {description && <p className="text-sm text-gray-600 mt-2">{description}</p>}
-        </div>
-        {actions && <div className="ml-6 flex-shrink-0">{actions}</div>}
-      </div>
-      <div className="p-8">{children}</div>
-    </div>
-  );
-}
+
 
 function FormField({ label, error, required, children }: {
   label: string;
@@ -239,9 +214,9 @@ function EditDocModal({ doc, isOpen, onClose, onSave }: {
         id: doc.id,
         title: formData.title.trim(),
         version: formData.version.trim(),
-        doc_type: formData.docType as any,
-        region: formData.region || undefined,
-        platform: formData.platform || undefined,
+        doc_type: formData.docType as DocType,
+        region: (formData.region || undefined) as Region | undefined,
+        platform: (formData.platform || undefined) as Platform | undefined,
         tags: formData.tags.split(",").map((t) => t.trim()).filter(Boolean),
         status: formData.status as any,
       });
@@ -455,9 +430,9 @@ function DocsTab() {
         size: formData.file!.size,
         title: formData.title.trim(),
         version: formData.version.trim(),
-        doc_type: formData.docType as any,
-        region: formData.region as any,
-        platform: formData.platform as any,
+        doc_type: formData.docType as DocType,
+        region: formData.region as Region,
+        platform: formData.platform as Platform,
         tags: formData.tags.split(",").map((t) => t.trim()).filter(Boolean),
       });
 
@@ -768,7 +743,7 @@ function SubmissionsTab() {
     try {
       setError(null);
       const [submissionsResponse, statsResponse] = await Promise.all([
-        backend.admin.listAdminSubmissions({
+        backend.submissions.listAdminSubmissions({
           status: filters.status || undefined,
           writer_email: filters.writer_email || undefined,
           region: filters.region || undefined,

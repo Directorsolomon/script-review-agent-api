@@ -262,7 +262,7 @@ import { get as api_submissions_get_get } from "~backend/submissions/get";
 import { getStats as api_submissions_get_stats_getStats } from "~backend/submissions/get_stats";
 import { listAdminSubmissions as api_submissions_list_admin_listAdminSubmissions } from "~backend/submissions/list_admin";
 import { listUserSubmissions as api_submissions_list_user_listUserSubmissions } from "~backend/submissions/list_user";
-import { presignScript as api_submissions_presign_script_presignScript } from "~backend/submissions/presign_script";
+
 import { updateStatus as api_submissions_update_status_updateStatus } from "~backend/submissions/update_status";
 
 export namespace submissions {
@@ -278,7 +278,7 @@ export namespace submissions {
             this.getStats = this.getStats.bind(this)
             this.listAdminSubmissions = this.listAdminSubmissions.bind(this)
             this.listUserSubmissions = this.listUserSubmissions.bind(this)
-            this.presignScript = this.presignScript.bind(this)
+
             this.updateStatus = this.updateStatus.bind(this)
         }
 
@@ -353,14 +353,7 @@ export namespace submissions {
             return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_submissions_list_user_listUserSubmissions>
         }
 
-        /**
-         * Creates a presigned URL for script uploads with validation
-         */
-        public async presignScript(params: RequestType<typeof api_submissions_presign_script_presignScript>): Promise<ResponseType<typeof api_submissions_presign_script_presignScript>> {
-            // Now make the actual call to the API
-            const resp = await this.baseClient.callTypedAPI(`/submissions/presign`, {method: "POST", body: JSON.stringify(params)})
-            return JSON.parse(await resp.text(), dateReviver) as ResponseType<typeof api_submissions_presign_script_presignScript>
-        }
+
 
         /**
          * Updates submission status (admin only)
@@ -1072,4 +1065,4 @@ export enum ErrCode {
     Unauthenticated = "unauthenticated",
 }
 
-export default new Client(import.meta.env.VITE_CLIENT_TARGET, { requestInit: { credentials: "include" } });
+export default new Client((import.meta as any).env?.VITE_CLIENT_TARGET || Local, { requestInit: { credentials: "include" } });

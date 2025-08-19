@@ -4,6 +4,8 @@ import Button from "./Button";
 import LoadingSpinner from "./LoadingSpinner";
 import SubmissionTable from "./SubmissionTable";
 import SubmissionStatusBadge from "./SubmissionStatusBadge";
+import Input from "./primitives/Input";
+import Card from "./primitives/Card";
 import backend from "~backend/client";
 
 interface Submission {
@@ -21,25 +23,27 @@ interface Submission {
   created_at: string;
 }
 
-function Card({ title, description, children, actions }: { 
-  title: string; 
-  description?: string; 
-  children: React.ReactNode; 
-  actions?: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-lg border border-gray-200 bg-white">
-      <div className="flex items-start justify-between p-8 border-b border-gray-100">
-        <div className="flex-1">
-          <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
-          {description && <p className="text-sm text-gray-600 mt-2">{description}</p>}
-        </div>
-        {actions && <div className="ml-6 flex-shrink-0">{actions}</div>}
-      </div>
-      <div className="p-8">{children}</div>
-    </div>
-  );
+// Type-safe interfaces for report data
+interface ActionPlanItem {
+  description: string;
+  priority: 'high' | 'med' | 'low';
+  owner?: string;
 }
+
+interface BucketScore {
+  name: string;
+  score: number;
+}
+
+interface ReportData {
+  highlights?: string[];
+  risks?: string[];
+  action_plan?: ActionPlanItem[];
+  buckets?: BucketScore[];
+  report_markdown?: string;
+}
+
+
 
 function EmptyState({ title, description, action }: {
   title: string;
@@ -56,24 +60,7 @@ function EmptyState({ title, description, action }: {
   );
 }
 
-function Input({ error, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { error?: boolean }) {
-  function cx(...classes: (string | false | undefined | null)[]) {
-    return classes.filter(Boolean).join(" ");
-  }
 
-  return (
-    <input
-      {...props}
-      className={cx(
-        "w-full rounded-lg border px-3 py-2 text-sm transition-colors",
-        "focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-1",
-        "placeholder:text-gray-400",
-        error ? "border-red-300 focus:ring-red-500" : "border-gray-200",
-        props.className
-      )}
-    />
-  );
-}
 
 function QuickStats({ submissions }: { submissions: Submission[] }) {
   const stats = {
@@ -133,9 +120,10 @@ export default function UserDashboard() {
         writer_email: emailFilter.trim(),
       });
       setSubmissions(response.items);
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error("Failed to load submissions:", e);
-      setError(e.message || "Failed to load submissions");
+      const errorMessage = e instanceof Error ? e.message : "Failed to load submissions";
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -147,7 +135,7 @@ export default function UserDashboard() {
       
       const reportWindow = window.open('', '_blank');
       if (reportWindow) {
-        const reportData = report.report_json || {};
+        const reportData: ReportData = report.report_json || {};
         
         reportWindow.document.write(`
           <!DOCTYPE html>
@@ -252,9 +240,9 @@ export default function UserDashboard() {
                 <div class="section">
                   <h2>📋 Action Plan</h2>
                   <ul>
-                    ${(reportData.action_plan || []).map((a: any) => `
+                    ${(reportData.action_plan || []).map((a: ActionPlanItem) => `
                       <li>
-                        <span class="priority-${a.priority || 'med'}">[${(a.priority || 'MED').toUpperCase()}]</span> 
+                        <span class="priority-${a.priority || 'med'}">[${(a.priority || 'MED').toUpperCase()}]</span>
                         ${a.description}
                       </li>
                     `).join('')}
@@ -265,7 +253,7 @@ export default function UserDashboard() {
                   <div class="section">
                     <h2>📊 Detailed Scores</h2>
                     <ul>
-                      ${reportData.buckets.map((b: any) => `<li><strong>${b.name}:</strong> ${b.score}/10</li>`).join('')}
+                      ${reportData.buckets.map((b: BucketScore) => `<li><strong>${b.name}:</strong> ${b.score}/10</li>`).join('')}
                     </ul>
                   </div>
                 ` : ''}
@@ -280,7 +268,7 @@ export default function UserDashboard() {
         `);
         reportWindow.document.close();
       }
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error("Failed to load report:", e);
       alert("Report not ready yet or failed to load. Please try again later.");
     }
@@ -292,20 +280,22 @@ export default function UserDashboard() {
       const result = await backend.review.run({ submissionId });
       alert(result.message || "Review restarted successfully!");
       await loadSubmissions();
-    } catch (e: any) {
+    } catch (e: unknown) {
       console.error("Failed to restart review:", e);
-      
+
       let errorMessage = "Failed to restart review";
-      if (e.message?.includes("Script too large") || e.message?.includes("extremely large")) {
-        errorMessage = "Your script is too large for processing. Please split it into smaller parts.";
-      } else if (e.message?.includes("payload_too_large")) {
-        errorMessage = "Script too large for processing. Please split into smaller files.";
-      } else if (e.message?.includes("failed_precondition")) {
-        errorMessage = e.message.replace("failed_precondition: ", "");
-      } else if (e.message) {
-        errorMessage = e.message;
+      if (e instanceof Error) {
+        if (e.message?.includes("Script too large") || e.message?.includes("extremely large")) {
+          errorMessage = "Your script is too large for processing. Please split it into smaller parts.";
+        } else if (e.message?.includes("payload_too_large")) {
+          errorMessage = "Script too large for processing. Please split into smaller files.";
+        } else if (e.message?.includes("failed_precondition")) {
+          errorMessage = e.message.replace("failed_precondition: ", "");
+        } else {
+          errorMessage = e.message;
+        }
       }
-      
+
       alert(errorMessage);
     } finally {
       setRetryingId(null);

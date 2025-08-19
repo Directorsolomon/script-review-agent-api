@@ -4,6 +4,8 @@ import Navigation from "./components/Navigation";
 import ValidationMessage from "./components/ValidationMessage";
 import Button from "./components/Button";
 import LoadingSpinner from "./components/LoadingSpinner";
+import Input from "./components/primitives/Input";
+import Card from "./components/primitives/Card";
 import backend from "~backend/client";
 
 // ----------------------------- Utils -----------------------------
@@ -11,42 +13,24 @@ function cx(...classes: (string | false | undefined | null)[]) {
   return classes.filter(Boolean).join(" ");
 }
 
-async function safeCopyToClipboard(text: string) {
+// Safe clipboard copy with modern approach
+async function safeCopyToClipboard(text: string): Promise<boolean> {
   try {
     if (navigator.clipboard && window.isSecureContext) {
       await navigator.clipboard.writeText(text);
       return true;
+    } else {
+      // For non-secure contexts, we can't reliably copy to clipboard
+      // Return false to show user-friendly message
+      return false;
     }
-  } catch {}
-  try {
-    const ta = document.createElement('textarea');
-    ta.value = text;
-    ta.style.position = 'fixed';
-    ta.style.left = '-9999px';
-    document.body.appendChild(ta);
-    ta.select();
-    const ok = document.execCommand('copy');
-    document.body.removeChild(ta);
-    return ok;
-  } catch {
+  } catch (err) {
+    console.error('Failed to copy text: ', err);
     return false;
   }
 }
 
-function Input({ error, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { error?: boolean }) {
-  return (
-    <input
-      {...props}
-      className={cx(
-        "w-full rounded-lg border px-3 py-2 text-sm transition-colors",
-        "focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-1",
-        "placeholder:text-gray-400",
-        error ? "border-red-300 focus:ring-red-500" : "border-gray-200",
-        props.className
-      )}
-    />
-  );
-}
+
 
 function Select({ error, className, ...props }: React.SelectHTMLAttributes<HTMLSelectElement> & { error?: boolean }) {
   return (
@@ -62,25 +46,7 @@ function Select({ error, className, ...props }: React.SelectHTMLAttributes<HTMLS
   );
 }
 
-function Card({ title, description, children, actions }: { 
-  title: string; 
-  description?: string; 
-  children: React.ReactNode; 
-  actions?: React.ReactNode;
-}) {
-  return (
-    <div className="rounded-lg border border-gray-200 bg-white">
-      <div className="flex items-start justify-between p-8 border-b border-gray-100">
-        <div className="flex-1">
-          <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
-          {description && <p className="text-sm text-gray-600 mt-2">{description}</p>}
-        </div>
-        {actions && <div className="ml-6 flex-shrink-0">{actions}</div>}
-      </div>
-      <div className="p-8">{children}</div>
-    </div>
-  );
-}
+
 
 function FormField({ label, error, required, children }: {
   label: string;
@@ -240,7 +206,7 @@ function SubmissionForm() {
     setErrors({});
     
     try {
-      const presign = await backend.submissions.presignScript({
+      const presign = await backend.storage.presignScript({
         filename: formData.file!.name,
         contentType: formData.file!.type || "application/pdf",
         size: formData.file!.size,
@@ -394,7 +360,8 @@ function SubmissionForm() {
                 setSuccessMessage("Submission ID copied to clipboard!");
                 setTimeout(() => setSuccessMessage(null), 3000);
               } else {
-                alert('Copy failed. Please select the ID and copy manually.');
+                setSuccessMessage(`Copy failed. Please manually copy this ID: ${success.submissionId}`);
+                setTimeout(() => setSuccessMessage(null), 8000);
               }
             }}
           >
